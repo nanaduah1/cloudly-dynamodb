@@ -16,8 +16,10 @@ class PutItem:
     data_shaper: Callable[[dict], dict] = None
 
     def process(self, input: Any) -> Any:
+        data = {**input}
+        data.pop("_request", "")
         put_cmd = PutItemCommand(
-            data=input,
+            data=data,
             key_class=self.key_class,
             database_table=self.database_table,
             data_shaper=self.data_shaper,
@@ -31,13 +33,15 @@ class UpdateItem:
     key: dict
 
     def process(self, input: Any) -> Any:
+        data = {**input}
+        data.pop("_request", "")
         update_cmd = UpdateItemCommand(
-            data=input,
+            data=data,
             key=self.key,
             database_table=self.database_table,
         )
         update_cmd.execute()
-        return {**input}
+        return {**data}
 
 
 @dataclass
