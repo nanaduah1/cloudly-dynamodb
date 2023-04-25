@@ -30,14 +30,15 @@ class PutItem:
 @dataclass
 class UpdateItem:
     database_table: Any
-    key: dict
+    key_factory: Callable[[Any], dict]
 
     def process(self, input: Any) -> Any:
         data = {**input}
         data.pop("_request", "")
+        key = self.key_factory(data)
         update_cmd = UpdateItemCommand(
+            key=key,
             data=data,
-            key=self.key,
             database_table=self.database_table,
         )
         update_cmd.execute()
