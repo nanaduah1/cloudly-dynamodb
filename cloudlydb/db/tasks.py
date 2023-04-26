@@ -34,8 +34,10 @@ class UpdateItem:
 
     def process(self, input: Any) -> Any:
         data = {**input}
-        data.pop("_request", "")
         key = self.key_factory(data)
+
+        # IMPORTANT: exclude the request metadata
+        data.pop("_request", "")
         update_cmd = UpdateItemCommand(
             key=key,
             data=data,
