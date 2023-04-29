@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
+import uuid
 
 from cloudlydb.db.dynamodb import (
     ItemKey,
@@ -17,10 +19,24 @@ class PutItem:
 
     def process(self, input: Any) -> Any:
         data = {**input}
+
+        now = datetime.utcnow()
+        if not "id" in data or not data["id"]:
+            data["id"] = f"{now.timestamp()}-{uuid.uuid4()}"
+
+        if not "timestamp" in data or not data["timestamp"]:
+            data["timestamp"] = now.isoformat()
+
+        if self.data_shaper and callable(self.data_shaper):
+            data = self.data_shaper(data)
+
+        key = self.key_class(data).build()
+
+        # IMPORTANT: exclude the request metadata
         data.pop("_request", "")
         put_cmd = PutItemCommand(
             data=data,
-            key_class=self.key_class,
+            key=key,
             database_table=self.database_table,
             data_shaper=self.data_shaper,
         )

@@ -20,23 +20,12 @@ class ItemKey(ABC):
 class PutItemCommand:
     database_table: Any
     data: dict
-    key_class: Type[ItemKey]
+    key: dict = None
     data_shaper: Callable[[dict], dict] = None
 
     def execute(self):
         data = self.data
-
-        if self.data_shaper and callable(self.data_shaper):
-            data = self.data_shaper(data)
-
-        now = datetime.utcnow()
-        if not "id" in data or not data["id"]:
-            data["id"] = f"{now.timestamp()}-{uuid.uuid4()}"
-
-        if not "timestamp" in data or not data["timestamp"]:
-            data["timestamp"] = now.isoformat()
-
-        keys = self.key_class(self.data).build()
+        keys = self.key
 
         item = {
             **keys,
