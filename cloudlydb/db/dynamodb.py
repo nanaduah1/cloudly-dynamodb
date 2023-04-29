@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Tuple, Type
 import uuid
 
 
+@dataclass
 class ItemKey(ABC):
     data: dict
 
