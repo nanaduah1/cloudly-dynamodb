@@ -67,7 +67,15 @@ class UpdateItem:
 class QueryItems:
     database_table: Any
     query: Callable[[Any, QueryTableCommand], QueryTableCommand]
+    index_name: str = None
+    scan_forward: bool = False
+    max_records: int = 25
 
     def process(self, input: Any) -> Any:
-        query_cmd = QueryTableCommand(self.database_table)
+        query_cmd = QueryTableCommand(
+            self.database_table,
+            index_name=self.index_name,
+            scan_forward=self.scan_forward,
+            max_records=self.max_records,
+        )
         return self.query(input, query_cmd).execute()

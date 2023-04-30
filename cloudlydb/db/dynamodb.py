@@ -92,9 +92,10 @@ class UpdateItemCommand:
 @dataclass(frozen=True)
 class QueryTableCommand:
     database_table: Any
-    key: dict = field(default_factory=dict)
     index_name: str = None
     scan_forward: bool = False
+    max_records: int = 25
+    key: dict = field(default_factory=dict)
 
     def execute(self) -> List[dict]:
         query_expression, expr_attr_vals = self._build_query()
@@ -102,6 +103,8 @@ class QueryTableCommand:
             KeyConditionExpression=query_expression,
             ExpressionAttributeValues=expr_attr_vals,
             ScanIndexForward=self.scan_forward,
+            Limit=self.max_records,
+            IndexName=self.index_name,
         )
 
         return response.get("Items", [])
