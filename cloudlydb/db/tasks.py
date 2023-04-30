@@ -66,8 +66,8 @@ class UpdateItem:
 @dataclass
 class QueryItems:
     database_table: Any
-    query: Callable[[QueryTableCommand], QueryTableCommand]
+    query: Callable[[Any, QueryTableCommand], QueryTableCommand]
 
     def process(self, input: Any) -> Any:
         query_cmd = QueryTableCommand(self.database_table)
-        return self.query(query_cmd).execute()
+        return self.query(input, query_cmd).execute()
