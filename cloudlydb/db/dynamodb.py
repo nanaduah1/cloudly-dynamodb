@@ -98,13 +98,17 @@ class QueryTableCommand:
 
     def execute(self) -> List[dict]:
         query_expression, expr_attr_vals = self._build_query()
-        response = self.database_table.query(
+        query = dict(
             KeyConditionExpression=query_expression,
             ExpressionAttributeValues=expr_attr_vals,
             ScanIndexForward=self.scan_forward,
             Limit=self.max_records,
-            IndexName=self.index_name,
         )
+
+        if self.index_name:
+            query["IndexName"] = self.index_name
+
+        response = self.database_table.query(**query)
 
         return response.get("Items", [])
 
