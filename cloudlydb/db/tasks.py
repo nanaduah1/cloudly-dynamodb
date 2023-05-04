@@ -1,7 +1,7 @@
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
-import uuid
 
 from cloudlydb.db.dynamodb import (
     ItemKey,
