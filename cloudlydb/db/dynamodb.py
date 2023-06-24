@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+import os
 from typing import Any, Callable, Dict, List, Tuple, Type
 
 
@@ -145,3 +146,15 @@ class QueryTableCommand:
         attr_vals = {":sk": sk, ":pk": pk}
 
         return query, attr_vals
+
+
+class Table:
+    @staticmethod
+    def from_name(table_name: str):
+        import boto3
+
+        return boto3.resource("dynamodb").Table(table_name)
+
+    @staticmethod
+    def from_env(env_var: str):
+        return Table.from_name(os.getenv(env_var))
