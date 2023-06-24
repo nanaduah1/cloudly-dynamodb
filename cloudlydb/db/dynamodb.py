@@ -82,7 +82,7 @@ class UpdateItemCommand:
         item = {"data": self.data, "updatedAt": now}
         attr_names, exp_vals, update_expr = SimpleUpdateExpression(item).build()
         self.database_table.update_item(
-            key=self.key,
+            Key=self.key,
             ExpressionAttributeNames=attr_names,
             ExpressionAttributeValues=exp_vals,
             UpdateExpression=update_expr,
