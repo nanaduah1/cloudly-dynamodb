@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cloudlydb"
-version = "0.0.5"
+version = "0.0.6"
 description = ""
 authors = ["Nana Duah <gabano2005@gmail.com>"]
 readme = "README.md"
@@ -12,6 +12,7 @@ python = "^3.9"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
+boto3 = "^1.26.163"
 
 [build-system]
 requires = ["poetry-core"]
