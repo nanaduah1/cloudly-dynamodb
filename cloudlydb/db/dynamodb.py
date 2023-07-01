@@ -40,10 +40,11 @@ class PutItemCommand:
 @dataclass(frozen=True)
 class SimpleUpdateExpression:
     data: dict
+    action: str = "SET"
 
     def build(self) -> Tuple[dict, dict, str]:
         attr_names, attr_values, expressions = self._build_for(self.data)
-        update_expr = f'SET {", ".join(expressions)}'
+        update_expr = f'{self.action} {", ".join(expressions)}'
         return (attr_names, attr_values, update_expr)
 
     def _build_for(
@@ -76,11 +77,13 @@ class UpdateItemCommand:
     database_table: Any
     key: dict
     data: dict
+    action: str = "SET"
 
     def execute(self):
         now = datetime.utcnow().isoformat()
         item = {"data": self.data, "updatedAt": now}
-        attr_names, exp_vals, update_expr = SimpleUpdateExpression(item).build()
+        cmd = SimpleUpdateExpression(item, self.action)
+        attr_names, exp_vals, update_expr = cmd.build()
         self.database_table.update_item(
             Key=self.key,
             ExpressionAttributeNames=attr_names,
