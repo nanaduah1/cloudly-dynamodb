@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
-from typing import Any, Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, Dict, List, Tuple
+
+from botocore.exceptions import ClientError
 
 
 @dataclass
@@ -31,7 +33,7 @@ class PutItemCommand:
         item = {
             **keys,
             "data": data,
-            "created": data["timestamp"],
+            "created": datetime.utcnow().isoformat(),
         }
         self.database_table.put_item(Item=item)
         return item
@@ -76,7 +78,9 @@ class AddExpression:
     data: dict
 
     def build(self) -> Tuple[dict, dict, str]:
-        # TEMP FIX: Remove updatedAt
+        # TEMP HACK: we have to pop the updatedAt since it has a string value
+        # This auto field isn't needed for an accumulator
+
         self.data.pop("updatedAt", "")
         attr_names, attr_values, expressions = self._build_for(self.data)
         update_expr = f'ADD {", ".join(expressions)}'
@@ -197,3 +201,22 @@ class Table:
     @staticmethod
     def from_env(env_var: str):
         return Table.from_name(os.getenv(env_var))
+
+
+@dataclass
+class AccumulateCommand:
+    database_table: Any
+
+    def write_stat(self, key: dict, data: dict):
+        try:
+            update_command = UpdateItemCommand(
+                self.database_table,
+                key=key,
+                data=data,
+                expression_class=AddExpression,
+            )
+            update_command.execute()
+        except ClientError:
+            data["timestamp"] = datetime.utcnow().isoformat()
+            put_command = PutItemCommand(self.database_table, data, key)
+            put_command.execute()

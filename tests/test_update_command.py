@@ -35,7 +35,6 @@ def test_update_object_with_inner_inner_map():
         }
     )
     exp_names, exp_vals, update_expr = tested.build()
-
     assert exp_names == {
         "#name": "name",
         "#carnum": "num",
