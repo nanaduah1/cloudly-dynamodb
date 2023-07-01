@@ -38,13 +38,12 @@ class PutItemCommand:
 
 
 @dataclass(frozen=True)
-class SimpleUpdateExpression:
+class SetExpression:
     data: dict
-    action: str = "SET"
 
     def build(self) -> Tuple[dict, dict, str]:
         attr_names, attr_values, expressions = self._build_for(self.data)
-        update_expr = f'{self.action} {", ".join(expressions)}'
+        update_expr = f'SET {", ".join(expressions)}'
         return (attr_names, attr_values, update_expr)
 
     def _build_for(
@@ -73,16 +72,51 @@ class SimpleUpdateExpression:
 
 
 @dataclass(frozen=True)
+class AddExpression:
+    data: dict
+
+    def build(self) -> Tuple[dict, dict, str]:
+        attr_names, attr_values, expressions = self._build_for(self.data)
+        update_expr = f'ADD {", ".join(expressions)}'
+        return (attr_names, attr_values, update_expr)
+
+    def _build_for(
+        self, obj, parent_field="", field_prefix=""
+    ) -> Tuple[dict, dict, list]:
+        expressions = []
+        attr_names = {}
+        attr_values = {}
+
+        for field, value in obj.items():
+            if isinstance(value, dict):
+                response = self._build_for(value, field, parent_field)
+                (inner_attr_names, inner_attr_vals, inner_exprs) = response
+                attr_names.update(inner_attr_names)
+                attr_values.update(inner_attr_vals)
+                expressions.extend(inner_exprs)
+                attr_names[f"#{field}"] = field
+            else:
+                prefix = f"#{parent_field}." if parent_field else ""
+                prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
+                field_name = f"{field_prefix}{parent_field}{field}"
+                expressions.append(f"{prefix}#{field_name} :{field_name}")
+                attr_names[f"#{field_name}"] = field
+                attr_values[f":{field_name}"] = value
+        return (attr_names, attr_values, expressions)
+
+
+@dataclass(frozen=True)
 class UpdateItemCommand:
     database_table: Any
     key: dict
     data: dict
-    action: str = "SET"
+    expression_class: Any = None
 
     def execute(self):
         now = datetime.utcnow().isoformat()
         item = {"data": self.data, "updatedAt": now}
-        cmd = SimpleUpdateExpression(item, self.action)
+        ExpressionClass = self.expression_class or SetExpression
+        cmd = ExpressionClass(item)
         attr_names, exp_vals, update_expr = cmd.build()
         self.database_table.update_item(
             Key=self.key,

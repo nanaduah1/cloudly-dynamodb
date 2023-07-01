@@ -1,8 +1,8 @@
-from cloudlydb.db.dynamodb import SimpleUpdateExpression
+from cloudlydb.db.dynamodb import SetExpression
 
 
 def test_update_simple_object():
-    tested = SimpleUpdateExpression({"name": "nana", "age": 10})
+    tested = SetExpression({"name": "nana", "age": 10})
     exp_names, exp_vals, update_expr = tested.build()
 
     assert exp_names == {"#name": "name", "#age": "age"}
@@ -11,7 +11,7 @@ def test_update_simple_object():
 
 
 def test_update_object_with_inner_map():
-    tested = SimpleUpdateExpression({"name": "nana", "car": {"num": 10, "vin": "3232"}})
+    tested = SetExpression({"name": "nana", "car": {"num": 10, "vin": "3232"}})
     exp_names, exp_vals, update_expr = tested.build()
 
     assert exp_names == {
@@ -28,7 +28,7 @@ def test_update_object_with_inner_map():
 
 
 def test_update_object_with_inner_inner_map():
-    tested = SimpleUpdateExpression(
+    tested = SetExpression(
         {
             "name": "nana",
             "car": {"num": 10, "vin": "3232", "own": {"name": "abu", "age": 22}},
