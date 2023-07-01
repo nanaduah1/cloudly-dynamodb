@@ -76,6 +76,8 @@ class AddExpression:
     data: dict
 
     def build(self) -> Tuple[dict, dict, str]:
+        # TEMP FIX: Remove updatedAt
+        self.data.pop("updatedAt", "")
         attr_names, attr_values, expressions = self._build_for(self.data)
         update_expr = f'ADD {", ".join(expressions)}'
         return (attr_names, attr_values, update_expr)
