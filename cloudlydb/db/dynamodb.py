@@ -56,7 +56,7 @@ class SetExpression:
         attr_values = {}
 
         for field, value in obj.items():
-            if isinstance(value, dict):
+            if value and isinstance(value, dict):
                 response = self._build_for(value, field, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
