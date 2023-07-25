@@ -14,8 +14,6 @@ import boto3
 
 table = boto3.resource('dynamodb').Table('STUDENT')
 
-
-
 @dataclass
 class Student(DynamodbItem):
     firstName: str
