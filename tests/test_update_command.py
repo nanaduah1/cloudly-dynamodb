@@ -1,4 +1,4 @@
-from cloudlydb.db.dynamodb import SetExpression
+from cloudlydb.core.dynamodb import SetExpression
 
 
 def test_update_simple_object():

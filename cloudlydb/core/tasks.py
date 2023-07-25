@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
-from cloudlydb.db.dynamodb import (
+from cloudlydb.core.dynamodb import (
     ItemKey,
     PutItemCommand,
     QueryTableCommand,

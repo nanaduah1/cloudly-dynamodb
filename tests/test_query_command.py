@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from cloudlydb.db.dynamodb import QueryTableCommand
+from cloudlydb.core.dynamodb import QueryTableCommand
 
 
 @dataclass
