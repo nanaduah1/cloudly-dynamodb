@@ -171,6 +171,37 @@ class QueryTableCommand:
         self.key["sk_op"] = "beginswith"
         return self
 
+    def sk_gt(self, value:any, sk_name:str=None):
+        """sk is greater than value"""
+
+        self.with_sk(value, sk_name)
+        self.key['sk_op'] = ">"
+        return self
+
+    def sk_gte(self, value:any, sk_name:str=None):
+        """sk is greater than or equal to value"""
+
+        self.with_sk(value, sk_name)
+        self.key['sk_op'] = ">="
+        return self
+
+    def sk_lte(self, value:any, sk_name:str=None):
+        """sk is less than or equal to value"""
+
+        self.with_sk(value, sk_name)
+        self.key['sk_op'] = "<="
+        return self
+
+    def sk_gte(self, value:any, sk_name:str=None):
+        """sk is less than value"""
+        
+        self.with_sk(value, sk_name)
+        self.key['sk_op'] = "<"
+        return self
+
+
+
+
     def _build_query(self):
         key = self.key
         pk = key.get("pk")
@@ -178,12 +209,14 @@ class QueryTableCommand:
 
         pk_name = key.get("pk_name") if key.get("pk_name") else "pk"
         pk_expr = f"{pk_name} = :pk"
-
         sk_name = key.get("sk_name") if key.get("sk_name") else "sk"
         sk_expr = f"{sk_name} = :sk"
         sk_op = key.get("sk_op")
         if sk_op == "beginswith":
             sk_expr = f"begins_with({sk_name}, :sk)"
+        elif sk_op:
+            sk_expr = f"{sk_name} {sk_op} :sk"
+
 
         query = f"{pk_expr} AND {sk_expr}"
         attr_vals = {":sk": sk, ":pk": pk}
