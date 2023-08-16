@@ -192,7 +192,7 @@ class QueryTableCommand:
         self.key['sk_op'] = "<="
         return self
 
-    def sk_gte(self, value:any, sk_name:str=None):
+    def sk_lt(self, value:any, sk_name:str=None):
         """sk is less than value"""
         
         self.with_sk(value, sk_name)
