@@ -9,7 +9,17 @@ class FakeCreateTable:
         self.items = []
 
     def put_item(self, Item):
-        self.items.append(Item)
+        self.items.append({**Item})
+
+
+class FakeGetTable:
+    def __init__(self, response: dict):
+        self._response = response
+        self._params = None
+
+    def query(self, **kwargs):
+        self._params = kwargs
+        return dict(Items=(self._response,))
 
 
 def test_id_auto_generates():
@@ -29,8 +39,7 @@ def test_id_auto_generates():
     assert len(table.items) == 1
     item = table.items[0]
 
-    assert item["pk"] == model._pk
-    assert item["sk"] == model._sk
+    assert item["pk"] == model.__class__._create_pk()
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
@@ -71,8 +80,6 @@ def test_create_record_from_manager():
     assert len(table.items) == 1
     item = table.items[0]
 
-    assert item["pk"] == model._pk
-    assert item["sk"] == model._sk
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
@@ -92,3 +99,26 @@ def test_raises_exception_when_field_is_not_on_model():
 
     with pytest.raises(UnknownFieldException):
         MyFakeModel.items.create(last_name="test", age=10)
+
+
+def test_get_record_from_manager():
+    table = FakeGetTable(
+        {
+            "pk": "test",
+            "sk": "test",
+            "data": {"id": "test", "name": "test", "age": 10},
+        }
+    )
+
+    @dataclass
+    class MyFakeModel(DynamodbItem):
+        name: str
+        age: int
+
+        class Meta:
+            dynamo_table = table
+
+    model = MyFakeModel.items.get(pk="test", sk="test")
+    assert model.id == "test"
+    assert model.name == "test"
+    assert model.age == 10

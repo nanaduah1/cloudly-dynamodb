@@ -1,9 +1,10 @@
 from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Callable, Iterable
 from uuid import uuid4
 
-from cloudlydb.core.dynamodb import PutItemCommand
+from cloudlydb.core.dynamodb import PutItemCommand, UpdateItemCommand, QueryTableCommand
 
 
 class UnknownFieldException(Exception):
@@ -43,8 +44,8 @@ class ItemManager:
 
         instance = self._instance or self._model_class(**cleaned_data)
 
+        pk = self._model_class._create_pk()
         sk = instance._create_sk()
-        pk = instance._create_pk()
 
         assert pk is not None, "pk must be provided"
         assert sk is not None, "sk must be provided"
@@ -62,18 +63,7 @@ class ItemManager:
         if response is None:
             raise Exception("Failed to create item")
 
-        _data = {**cleaned_data}
-
-        # Exclude the id from the data being used to initialize the model
-        # since it is not part of the model's dataclass fields
-
-        id = _data.pop("id")
-        new_item = self._model_class(**_data)
-        new_item.__dict__["_pk"] = pk
-        new_item.__dict__["_sk"] = sk
-        new_item.id = id
-
-        return new_item
+        return self._model_class._from_item_dict(response)
 
     def __validate_data(self, **kwargs) -> dict:
         assert (
@@ -102,16 +92,79 @@ class ItemManager:
         Update an existing item in the database using config from the attached model class
         """
 
-        self.__validate_data(pk, sk, kwargs)
+        assert pk is not None, "pk must be provided"
+        assert sk is not None, "sk must be provided"
+        cleaned_data = self.__validate_data(**kwargs)
+        update_command = UpdateItemCommand(
+            self._model_class.Meta.dynamo_table,
+            key=dict(pk=pk, sk=sk),
+            data=cleaned_data,
+        )
+        response = update_command.execute()
+        if response is None:
+            raise Exception("Failed to update item")
 
-    def get(self, pk: str, sk: str):
-        pass
+        return True
 
-    def all(self, pk: str, **kwargs):
-        pass
+    def get(self, pk: str, sk: str, index_name=None) -> "DynamodbItem":
+        """
+        Get an item from the database using config from the attached model class
+        """
 
-    def delete(self, pk: str, **kwargs):
-        pass
+        assert pk is not None, "pk must be provided"
+        assert sk is not None, "sk must be provided"
+
+        get_command = QueryTableCommand(
+            self._model_class.Meta.dynamo_table,
+            index_name=index_name,
+        )
+        items = get_command.with_pk(pk).with_sk(sk).execute()
+
+        if not items:
+            return None
+
+        obj = self._model_class._from_item_dict(items[0])
+        return obj
+
+    def all(
+        self,
+        pk: str,
+        predicate: Callable[[QueryTableCommand], QueryTableCommand] = None,
+        index_name: str = None,
+        limit: int = None,
+        ascending: bool = False,
+    ) -> Iterable["DynamodbItem"]:
+        """
+        Fetch all items matching the pk and sk filter.
+        pk must always be exact. sk can be a beginswith filter (e.g. "sk__beginswith")
+        """
+
+        assert pk is not None, "pk must be provided"
+        assert predicate is not None, "predicate must be provided"
+        assert callable(predicate), "predicate must be callable"
+
+        query_command = QueryTableCommand(
+            self._model_class.Meta.dynamo_table,
+            index_name=index_name,
+            max_records=limit,
+            scan_forward=ascending,
+        )
+
+        query_command = predicate(query_command)
+        results = query_command.with_pk(pk).execute()
+        return (self._model_class._from_item_dict(item) for item in results)
+
+    def delete(self, pk: str, sk: str):
+        """
+        Delete an item from the database using config from the attached model class
+        """
+
+        assert pk is not None, "pk must be provided"
+        assert sk is not None, "sk must be provided"
+
+        data_table = self._model_class.Meta.dynamo_table
+        data_table.delete_item(Key=dict(pk=pk, sk=sk))
+        return True
 
 
 class IdField:
@@ -120,19 +173,19 @@ class IdField:
     """
 
     def __init__(self):
-        self.name = None
+        self._name = None
 
     def __get__(self, instance, owner):
         if instance is None:
             return self
-        value = instance.__dict__.get(self.name)
+        value = instance.__dict__.get(self._name)
         return value
 
     def __set__(self, instance, value):
-        instance.__dict__[self.name] = value
+        instance.__dict__[self._name] = value
 
     def __set_name__(self, owner, name):
-        self.name = name
+        self._name = name
 
 
 @dataclass
@@ -140,29 +193,40 @@ class DynamodbItem(ABC):
     id = IdField()
     items = ItemManager()
 
-    def save(self):
+    def save(self) -> bool:
         res = self.items.create(**self.__dict__)
         self.id = res.id
+        return True
 
-    def delete(self):
-        pk = self.__dict__.get("_pk")
-        sk = self.__dict__.get("_sk")
-        if pk and sk:
-            self.items.delete(pk=pk, sk=sk)
+    def delete(self) -> bool:
+        pk = self._create_pk()
+        sk = self._create_sk()
+        return self.items.delete(pk=pk, sk=sk)
 
-    def _create_pk(self):
-        discriminator = getattr(self.__class__.Meta, "model_name", None)
+    @classmethod
+    def _create_pk(cls):
+        discriminator = getattr(cls.Meta, "model_name", None)
         if discriminator is None:
-            discriminator = _fully_qualified_name(self.__class__)
+            discriminator = _fully_qualified_name(cls)
 
-        self.__dict__["_pk"] = discriminator
         return discriminator
 
     def _create_sk(self):
         sk = f"{self.__class__.__name__}#{self.id}"
-        self.__dict__["_sk"] = sk
         return sk
 
     @classmethod
     def _new_id(cls):
         return f"{datetime.now().timestamp()}{uuid4()}"
+
+    @classmethod
+    def _from_item_dict(cls, item: dict):
+        data = item.get("data", {})
+        item_id = data.get("id")
+        data_without_id = {k: v for k, v in data.items() if k != "id"}
+        obj = cls(**data_without_id)
+        obj.id = item_id
+        return obj
+
+    def __str__(self):
+        return f"<{self.__class__.__name__} {self.id}>"
