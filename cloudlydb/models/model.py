@@ -21,6 +21,10 @@ class ItemManager:
         self._instance = None
 
     def __get__(self, instance, owner):
+        # We can only attach to a subclass of DynamodbItem
+        assert issubclass(
+            owner, DynamodbItem
+        ), "ItemManager must be attached to a DynamodbItem"
         self._model_class = owner
         if instance:
             self._instance = instance
