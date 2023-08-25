@@ -55,20 +55,20 @@ class SetExpression:
         attr_names = {}
         attr_values = {}
 
-        for field, value in obj.items():
+        for fld, value in obj.items():
             if value and isinstance(value, dict):
-                response = self._build_for(value, field, parent_field)
+                response = self._build_for(value, fld, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
                 attr_values.update(inner_attr_vals)
                 expressions.extend(inner_exprs)
-                attr_names[f"#{field}"] = field
+                attr_names[f"#{fld}"] = fld
             else:
                 prefix = f"#{parent_field}." if parent_field else ""
                 prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
-                field_name = f"{field_prefix}{parent_field}{field}"
+                field_name = f"{field_prefix}{parent_field}{fld}"
                 expressions.append(f"{prefix}#{field_name} = :{field_name}")
-                attr_names[f"#{field_name}"] = field
+                attr_names[f"#{field_name}"] = fld
                 attr_values[f":{field_name}"] = value
         return (attr_names, attr_values, expressions)
 
@@ -93,20 +93,20 @@ class AddExpression:
         attr_names = {}
         attr_values = {}
 
-        for field, value in obj.items():
+        for fld, value in obj.items():
             if isinstance(value, dict):
-                response = self._build_for(value, field, parent_field)
+                response = self._build_for(value, fld, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
                 attr_values.update(inner_attr_vals)
                 expressions.extend(inner_exprs)
-                attr_names[f"#{field}"] = field
+                attr_names[f"#{fld}"] = fld
             else:
                 prefix = f"#{parent_field}." if parent_field else ""
                 prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
-                field_name = f"{field_prefix}{parent_field}{field}"
+                field_name = f"{field_prefix}{parent_field}{fld}"
                 expressions.append(f"{prefix}#{field_name} :{field_name}")
-                attr_names[f"#{field_name}"] = field
+                attr_names[f"#{field_name}"] = fld
                 attr_values[f":{field_name}"] = value
         return (attr_names, attr_values, expressions)
 
