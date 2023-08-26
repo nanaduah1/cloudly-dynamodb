@@ -21,10 +21,10 @@ class PutItem:
         data = {**input}
 
         now = datetime.utcnow()
-        if not "id" in data or not data["id"]:
+        if "id" not in data or not data["id"]:
             data["id"] = f"{now.timestamp()}-{uuid.uuid4()}"
 
-        if not "timestamp" in data or not data["timestamp"]:
+        if "timestamp" not in data or not data["timestamp"]:
             data["timestamp"] = now.isoformat()
 
         if self.data_shaper and callable(self.data_shaper):
