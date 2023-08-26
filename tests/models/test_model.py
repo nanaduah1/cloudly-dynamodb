@@ -40,6 +40,7 @@ def test_id_auto_generates():
     item = table.items[0]
 
     assert item["pk"] == model.__class__._create_pk()
+    assert item["sk"] == model.__class__._create_sk(id=model.id)
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
@@ -118,7 +119,65 @@ def test_get_record_from_manager():
         class Meta:
             dynamo_table = table
 
-    model = MyFakeModel.items.get(pk="test", sk="test")
+    model = MyFakeModel.items.get(id="test")
     assert model.id == "test"
     assert model.name == "test"
     assert model.age == 10
+
+
+def test_override_pk():
+    table = FakeCreateTable()
+
+    @dataclass
+    class MyFakeModel(DynamodbItem):
+        name: str
+        age: int
+        _country: str = "USA"
+
+        @classmethod
+        def _create_pk(cls, **kwargs):
+            return f"DATA#FAKA#{kwargs.get('_country')}"
+
+        class Meta:
+            dynamo_table = table
+
+    model = MyFakeModel(name="test", age=10, _country="UK")
+    model.save()
+    assert model.id is not None
+    assert len(table.items) == 1
+    item = table.items[0]
+
+    assert item["pk"] == model.__class__._create_pk(_country="UK")
+    assert item["sk"] == model.__class__._create_sk(id=model.id)
+    assert item["data"]["name"] == "test"
+    assert item["data"]["age"] == 10
+    assert item["data"]["id"] is not None
+
+
+def test_override_sk():
+    table = FakeCreateTable()
+
+    @dataclass
+    class MyFakeModel(DynamodbItem):
+        name: str
+        age: int
+        _country: str = "USA"
+
+        @classmethod
+        def _create_sk(cls, **kwargs):
+            return f"DATA#FAKA#{kwargs.get('_country')}"
+
+        class Meta:
+            dynamo_table = table
+
+    model = MyFakeModel(name="test", age=10, _country="UK")
+    model.save()
+    assert model.id is not None
+    assert len(table.items) == 1
+    item = table.items[0]
+
+    assert item["pk"] == model.__class__._create_pk()
+    assert item["sk"] == model.__class__._create_sk(_country="UK")
+    assert item["data"]["name"] == "test"
+    assert item["data"]["age"] == 10
+    assert item["data"]["id"] is not None
