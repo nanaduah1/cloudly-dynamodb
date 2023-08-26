@@ -26,7 +26,7 @@ class Student(DynamodbItem):
         dynamo_table = table
 
 # Get a single record
-student = Student.itmes.get(id='123455')
+student = Student.items.get(id='123455')
 
 # Get all records
 all_students = Student.items.all()
