@@ -44,14 +44,15 @@ class ItemManager:
 
         instance = self._instance or self._model_class(**cleaned_data)
 
-        pk = self._model_class._create_pk()
-        sk = instance._create_sk()
-
-        assert pk is not None, "pk must be provided"
-        assert sk is not None, "sk must be provided"
-
         # Make sure we have an id
-        cleaned_data["id"] = instance.id or self._model_class._new_id()
+        item_id = instance.id or self._model_class._new_id()
+        cleaned_data["id"] = item_id
+
+        pk = self._model_class._create_pk(**kwargs)
+        sk = self._model_class._create_sk(id=item_id, **kwargs)
+
+        assert pk is not None, f"invalid pk value '{pk}'"
+        assert sk is not None, f"invalid sk value '{sk}'"
 
         create_command = PutItemCommand(
             self._model_class.Meta.dynamo_table,
@@ -87,13 +88,19 @@ class ItemManager:
 
         return {k: v for k, v in kwargs.items() if k in public_fields or k == "id"}
 
-    def update(self, pk: str, sk: str, **kwargs):
+    def update(self, id: str, **kwargs):
         """
         Update an existing item in the database using config from the attached model class
         """
 
-        assert pk is not None, "pk must be provided"
-        assert sk is not None, "sk must be provided"
+        assert id is not None, "id must be provided"
+
+        pk = self._model_class._create_pk(id=id, **kwargs)
+        sk = self._model_class._create_sk(id=id, **kwargs)
+
+        assert pk is not None, f"invalid pk value '{pk}'"
+        assert sk is not None, f"invalid sk value '{sk}'"
+
         cleaned_data = self.__validate_data(**kwargs)
         update_command = UpdateItemCommand(
             self._model_class.Meta.dynamo_table,
@@ -106,13 +113,15 @@ class ItemManager:
 
         return True
 
-    def get(self, pk: str, sk: str, index_name=None) -> "DynamodbItem":
+    def get(self, index_name=None, **kwargs) -> "DynamodbItem":
         """
         Get an item from the database using config from the attached model class
         """
 
-        assert pk is not None, "pk must be provided"
-        assert sk is not None, "sk must be provided"
+        pk = self._model_class._create_pk(**kwargs)
+        sk = self._model_class._create_sk(**kwargs)
+        assert pk is not None, f"invalid pk value '{pk}'"
+        assert sk is not None, f"invalid sk value '{sk}'"
 
         get_command = QueryTableCommand(
             self._model_class.Meta.dynamo_table,
@@ -128,20 +137,23 @@ class ItemManager:
 
     def all(
         self,
-        pk: str,
         predicate: Callable[[QueryTableCommand], QueryTableCommand] = None,
         index_name: str = None,
         limit: int = None,
         ascending: bool = False,
+        **kwargs,
     ) -> Iterable["DynamodbItem"]:
         """
         Fetch all items matching the pk and sk filter.
         pk must always be exact. sk can be a beginswith filter (e.g. "sk__beginswith")
         """
 
-        assert pk is not None, "pk must be provided"
+        pk = self._model_class._create_pk(**kwargs)
+        assert pk is not None, f"invalid pk value '{pk}'"
         assert predicate is not None, "predicate must be provided"
-        assert callable(predicate), "predicate must be callable"
+        assert predicate is None or callable(
+            predicate
+        ), "predicate must be None or callable"
 
         query_command = QueryTableCommand(
             self._model_class.Meta.dynamo_table,
@@ -154,13 +166,17 @@ class ItemManager:
         results = query_command.with_pk(pk).execute()
         return (self._model_class._from_item_dict(item) for item in results)
 
-    def delete(self, pk: str, sk: str):
+    def delete(self, **kwargs):
         """
         Delete an item from the database using config from the attached model class
         """
 
-        assert pk is not None, "pk must be provided"
-        assert sk is not None, "sk must be provided"
+        assert id is not None, "id must be provided"
+
+        pk = self._model_class._create_pk(**kwargs)
+        sk = self._model_class._create_sk(**kwargs)
+        assert pk is not None, f"invalid pk value '{pk}'"
+        assert sk is not None, f"invalid sk value '{sk}'"
 
         data_table = self._model_class.Meta.dynamo_table
         data_table.delete_item(Key=dict(pk=pk, sk=sk))
@@ -194,25 +210,29 @@ class DynamodbItem(ABC):
     items = ItemManager()
 
     def save(self) -> bool:
-        res = self.items.create(**self.__dict__)
-        self.id = res.id
+        if self.id is None:
+            res = self.items.create(**self.__dict__)
+            self.id = res.id
+        else:
+            # TODO: We should only update fields that have changed
+            self.items.update(self.id, **self.__dict__)
         return True
 
     def delete(self) -> bool:
-        pk = self._create_pk()
-        sk = self._create_sk()
-        return self.items.delete(pk=pk, sk=sk)
+        return self.items.delete(self.id)
 
     @classmethod
-    def _create_pk(cls):
+    def _create_pk(cls, **kwargs):
         discriminator = getattr(cls.Meta, "model_name", None)
         if discriminator is None:
             discriminator = _fully_qualified_name(cls)
 
         return discriminator
 
-    def _create_sk(self):
-        sk = f"{self.__class__.__name__}#{self.id}"
+    @classmethod
+    def _create_sk(cls, **kwargs):
+        id = kwargs.get("id")
+        sk = f"{cls.__name__}#{id}"
         return sk
 
     @classmethod
