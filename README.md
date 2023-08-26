@@ -92,3 +92,10 @@ if you want to query for a student, you must provide the firstName and id.
 ```Python
 Student.items.get(firstName='John', id='123455')
 ```
+
+## Migration from version 1
+
+Version 2 is generally backwards compatible with version 1. However, there are some breaking changes.
+The following changes need to be made to your code to migrate from version 1 to version 2.
+
+1. Change all `from cloudly.db.dynamodb import XXXX` to `from cloudly.core.dynamodb import XXXX`

@@ -45,7 +45,11 @@ class ItemManager:
         instance = self._instance or self._model_class(**cleaned_data)
 
         # Make sure we have an id
-        item_id = instance.id or self._model_class._new_id()
+        # Make sure we have an id
+        if instance.id is None:
+            instance.id = instance._new_id_()
+
+        item_id = instance.id
         cleaned_data["id"] = item_id
 
         pk = self._model_class._create_pk(**kwargs)
@@ -107,10 +111,7 @@ class ItemManager:
             key=dict(pk=pk, sk=sk),
             data=cleaned_data,
         )
-        response = update_command.execute()
-        if response is None:
-            raise Exception("Failed to update item")
-
+        update_command.execute()
         return True
 
     def get(self, index_name=None, **kwargs) -> "DynamodbItem":
@@ -139,7 +140,7 @@ class ItemManager:
         self,
         predicate: Callable[[QueryTableCommand], QueryTableCommand] = None,
         index_name: str = None,
-        limit: int = None,
+        limit: int = 50,
         ascending: bool = False,
         **kwargs,
     ) -> Iterable["DynamodbItem"]:
@@ -150,7 +151,6 @@ class ItemManager:
 
         pk = self._model_class._create_pk(**kwargs)
         assert pk is not None, f"invalid pk value '{pk}'"
-        assert predicate is not None, "predicate must be provided"
         assert predicate is None or callable(
             predicate
         ), "predicate must be None or callable"
@@ -162,7 +162,15 @@ class ItemManager:
             scan_forward=ascending,
         )
 
-        query_command = predicate(query_command)
+        if predicate:
+            query_command = predicate(query_command)
+        else:
+            # If no predicate is provided, use the sk prefix to filter
+            sk_prefix = (
+                self._model_class.Meta.__dict__.get("sk_prefix")
+                or self._model_class.__name__
+            )
+            query_command = query_command.sk_beginswith(sk_prefix)
         results = query_command.with_pk(pk).execute()
         return (self._model_class._from_item_dict(item) for item in results)
 
@@ -215,7 +223,7 @@ class DynamodbItem(ABC):
             self.id = res.id
         else:
             # TODO: We should only update fields that have changed
-            self.items.update(self.id, **self.__dict__)
+            self.items.update(**self.__dict__)
         return True
 
     def delete(self) -> bool:
@@ -235,9 +243,8 @@ class DynamodbItem(ABC):
         sk = f"{cls.__name__}#{id}"
         return sk
 
-    @classmethod
-    def _new_id(cls):
-        return f"{datetime.now().timestamp()}{uuid4()}"
+    def _new_id_(self):
+        return f"{datetime.utcnow().timestamp()}-{uuid4()}"
 
     @classmethod
     def _from_item_dict(cls, item: dict):
