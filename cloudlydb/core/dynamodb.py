@@ -296,6 +296,18 @@ class QueryTableCommand:
         query["ProjectionExpression"] = ", ".join(projection)
         query["ExpressionAttributeNames"] = exp_attr_names
 
+    def _build_projection(self, query):
+        exp_attr_names = {}
+        projection = []
+        for fld in self.projection:
+            parts = fld.split(".")
+            for part in parts:
+                exp_attr_names[f"#{part}"] = part
+            projection.append(".".join([f"#{part}" for part in parts]))
+
+        query["ProjectionExpression"] = ", ".join(projection)
+        query["ExpressionAttributeNames"] = exp_attr_names
+
     def with_pk(self, pk: Any, pk_name: str = None):
         self.key["pk"] = pk
         self.key["pk_name"] = pk_name

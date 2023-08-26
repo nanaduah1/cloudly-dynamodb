@@ -17,9 +17,6 @@ class FakeDb:
         return {}
 
 
-from cloudlydb.core.dynamodb import SetExpression
-
-
 def test_update_simple_object():
     tested = SetExpression({"name": "nana", "age": 10})
     exp_names, exp_vals, update_expr = tested.build()
