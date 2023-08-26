@@ -59,7 +59,7 @@ By default, the partition key is generated from the fully qualified class name o
 the model. The sort key is generated from the class name of the model and the instance id.
 
 If this is not what you want, you can override the partition key and sort key by overriding
-the \_create_pk and \_create_sk methods.
+the `_create_pk` and `_create_sk` methods.
 
 Example:
 
@@ -91,6 +91,23 @@ if you want to query for a student, you must provide the firstName and id.
 
 ```Python
 Student.items.get(firstName='John', id='123455')
+```
+
+By default, the sort key (sk) is prefixed with the class name. You can change this by
+specifying `sk_prefix` in the Meta class.
+
+```Python
+
+@dataclass
+class Student(DynamodbItem):
+    firstName: str
+    lastName: str
+    dateOfBirth: datetime
+
+    class Meta:
+        data_table = table
+        sk_prefix = 'StudentProfile'
+
 ```
 
 ## Migration from version 1
