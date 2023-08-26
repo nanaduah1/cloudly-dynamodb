@@ -91,6 +91,7 @@ if you want to query for a student, you must provide the firstName and id.
 Student.items.get(firstName='John', id='123455')
 ```
 
+<<<<<<< HEAD
 By default, the sort key (sk) is prefixed with the class name. You can change this by
 specifying `sk_prefix` in the Meta class.
 
@@ -108,6 +109,8 @@ class Student(DynamodbItem):
 
 ```
 
+=======
+>>>>>>> 37f7c42 (Fix error causing duplicate ids when using the items collection to create records)
 ## Migration from version 1
 
 Version 2 is generally backwards compatible with version 1. However, there are some breaking changes.
