@@ -203,6 +203,7 @@ class ItemManager:
                 or self._model_class.__name__
             )
             query_command = query_command.sk_beginswith(sk_prefix)
+
         results = query_command.with_pk(pk).execute()
         return QueryResults(results, self._model_class)
 
