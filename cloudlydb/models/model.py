@@ -25,14 +25,18 @@ class QueryResults:
     def __init__(self, response: UntypedQueryResults, model_class):
         self._response = response
         self._model_class = model_class
+        self.__next = 0
 
     def __iter__(self) -> Iterable["DynamodbItem"]:
         return self
 
     def __next__(self) -> "DynamodbItem":
-        for item in self._response:
-            yield self._model_class._from_item_dict(item)
-        raise StopIteration
+        try:
+            item = self._model_class._from_item_dict(self._response[self.__next])
+            self.__next += 1
+            return item
+        except IndexError:
+            raise StopIteration
 
     def __getitem__(self, index: int) -> "DynamodbItem":
         return self._model_class._from_item_dict(self._response[index])

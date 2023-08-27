@@ -151,14 +151,18 @@ class QueryResults:
     def __init__(self, response: dict):
         self.__items = response.get("Items", [])
         self.__last_evaluated_key = response.get("LastEvaluatedKey")
+        self.__next = 0
 
     def __iter__(self) -> dict:
         return self
 
     def __next__(self) -> dict:
-        for item in self.__items:
-            yield item
-        raise StopIteration
+        try:
+            item = self.__items[self.__next]
+            self.__next += 1
+            return item
+        except IndexError:
+            raise StopIteration
 
     def __getitem__(self, index: int) -> dict:
         return self.__items[index]
