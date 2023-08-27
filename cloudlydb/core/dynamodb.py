@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -132,6 +133,43 @@ class UpdateItemCommand:
         )
 
 
+class KeyEncoder:
+    @staticmethod
+    def encode(pk: str, sk: str) -> str:
+        token = f"{pk}||{sk}"
+        b64_token = base64.b64encode(token.encode("utf-8")).decode("utf-8")
+        return b64_token
+
+    @staticmethod
+    def decode(token: str) -> Tuple[str, str]:
+        decoded = base64.b64decode(token.encode("utf-8")).decode("utf-8")
+        pk, sk = decoded.split("||")
+        return pk, sk
+
+
+class QueryResults:
+    def __init__(self, response: dict):
+        self.__items = response.get("Items", [])
+        self.__last_evaluated_key = response.get("LastEvaluatedKey")
+
+    def __iter__(self) -> dict:
+        return self
+
+    def __next__(self) -> dict:
+        for item in self.__items:
+            yield item
+        raise StopIteration
+
+    def __getitem__(self, index: int) -> dict:
+        return self.__items[index]
+
+    def last_evaluated_key(self) -> str:
+        if not self.__last_evaluated_key:
+            return None
+
+        return KeyEncoder.encode(**self.__last_evaluated_key)
+
+
 @dataclass(frozen=True)
 class QueryTableCommand:
     database_table: Any
@@ -139,8 +177,9 @@ class QueryTableCommand:
     scan_forward: bool = False
     max_records: int = 25
     key: dict = field(default_factory=dict)
+    last_evaluated_key: str = None
 
-    def execute(self) -> List[dict]:
+    def execute(self) -> QueryResults:
         query_expression, expr_attr_vals = self._build_query()
         query = dict(
             KeyConditionExpression=query_expression,
@@ -152,9 +191,13 @@ class QueryTableCommand:
         if self.index_name:
             query["IndexName"] = self.index_name
 
+        if self.last_evaluated_key:
+            pk, sk = KeyEncoder.decode(self.last_evaluated_key)
+            query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
+
         response = self.database_table.query(**query)
 
-        return response.get("Items", [])
+        return QueryResults(response)
 
     def with_pk(self, pk: Any, pk_name: str = None):
         self.key["pk"] = pk
