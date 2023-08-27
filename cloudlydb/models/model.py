@@ -260,7 +260,7 @@ class DynamodbItem(ABC):
         return True
 
     def delete(self) -> bool:
-        return self.items.delete(self.id)
+        return self.items.delete(**self.__dict__)
 
     @classmethod
     def _create_pk(cls, **kwargs):
