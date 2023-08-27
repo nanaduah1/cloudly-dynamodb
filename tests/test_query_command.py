@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from cloudlydb.core.dynamodb import QueryTableCommand
+from cloudlydb.core.dynamodb import QueryTableCommand, QueryResults
 
 
 @dataclass
@@ -18,7 +18,7 @@ def test_query_exact():
     response = tested.execute()
 
     assert response is not None
-    assert isinstance(response, list)
+    assert isinstance(response, QueryResults)
 
     query_expr = db.data.get("KeyConditionExpression")
     assert query_expr == "pk = :pk AND sk = :sk"
@@ -33,7 +33,7 @@ def test_query_exact_scan_forward():
     response = tested.execute()
 
     assert response is not None
-    assert isinstance(response, list)
+    assert isinstance(response, QueryResults)
 
     query_expr = db.data.get("KeyConditionExpression")
     assert query_expr == "pk = :pk AND sk = :sk"
@@ -48,7 +48,7 @@ def test_query_custom_pk_sk():
     response = tested.execute()
 
     assert response is not None
-    assert isinstance(response, list)
+    assert isinstance(response, QueryResults)
 
     query_expr = db.data.get("KeyConditionExpression")
     assert query_expr == "sid = :pk AND cid = :sk"
@@ -63,7 +63,7 @@ def test_query_beginswith():
     response = tested.execute()
 
     assert response is not None
-    assert isinstance(response, list)
+    assert isinstance(response, QueryResults)
 
     query_expr = db.data.get("KeyConditionExpression")
     assert query_expr == "pk = :pk AND begins_with(sk, :sk)"

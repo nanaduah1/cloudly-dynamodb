@@ -4,7 +4,12 @@ from datetime import datetime
 from typing import Callable, Iterable
 from uuid import uuid4
 
-from cloudlydb.core.dynamodb import PutItemCommand, UpdateItemCommand, QueryTableCommand
+from cloudlydb.core.dynamodb import (
+    PutItemCommand,
+    UpdateItemCommand,
+    QueryTableCommand,
+    QueryResults as UntypedQueryResults,
+)
 
 
 class UnknownFieldException(Exception):
@@ -14,6 +19,27 @@ class UnknownFieldException(Exception):
 
 def _fully_qualified_name(cls):
     return cls.__module__ + "." + cls.__name__
+
+
+class QueryResults:
+    def __init__(self, response: UntypedQueryResults, model_class):
+        self._response = response
+        self._model_class = model_class
+
+    def __iter__(self) -> Iterable["DynamodbItem"]:
+        return self
+
+    def __next__(self) -> "DynamodbItem":
+        for item in self._response:
+            yield self._model_class._from_item_dict(item)
+        raise StopIteration
+
+    def __getitem__(self, index: int) -> "DynamodbItem":
+        return self._model_class._from_item_dict(self._response[index])
+
+    @property
+    def last_evaluated_key(self) -> str:
+        return self._response.last_evaluated_key()
 
 
 class ItemManager:
@@ -142,8 +168,9 @@ class ItemManager:
         index_name: str = None,
         limit: int = 50,
         ascending: bool = False,
+        last_evaluated_key: str = None,
         **kwargs,
-    ) -> Iterable["DynamodbItem"]:
+    ) -> QueryResults:
         """
         Fetch all items matching the pk and sk filter.
         pk must always be exact. sk can be a beginswith filter (e.g. "sk__beginswith")
@@ -160,6 +187,7 @@ class ItemManager:
             index_name=index_name,
             max_records=limit,
             scan_forward=ascending,
+            last_evaluated_key=last_evaluated_key,
         )
 
         if predicate:
@@ -171,8 +199,9 @@ class ItemManager:
                 or self._model_class.__name__
             )
             query_command = query_command.sk_beginswith(sk_prefix)
+
         results = query_command.with_pk(pk).execute()
-        return (self._model_class._from_item_dict(item) for item in results)
+        return QueryResults(results, self._model_class)
 
     def delete(self, **kwargs):
         """
