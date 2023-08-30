@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "cloudlydb"
-version = "2.0.0-alpha.4"
+version = "2.0.0-alpha.5"
 description = ""
 authors = ["Nana Duah <gabano2005@gmail.com>"]
 readme = "README.md"
 packages = [{include = "cloudlydb"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9 <4.0"
 
 
 [tool.poetry.group.dev.dependencies]
