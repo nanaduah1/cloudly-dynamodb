@@ -171,36 +171,33 @@ class QueryTableCommand:
         self.key["sk_op"] = "beginswith"
         return self
 
-    def sk_gt(self, value:any, sk_name:str=None):
+    def sk_gt(self, value: any, sk_name: str = None):
         """sk is greater than value"""
 
         self.with_sk(value, sk_name)
-        self.key['sk_op'] = ">"
+        self.key["sk_op"] = ">"
         return self
 
-    def sk_gte(self, value:any, sk_name:str=None):
+    def sk_gte(self, value: any, sk_name: str = None):
         """sk is greater than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key['sk_op'] = ">="
+        self.key["sk_op"] = ">="
         return self
 
-    def sk_lte(self, value:any, sk_name:str=None):
+    def sk_lte(self, value: any, sk_name: str = None):
         """sk is less than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key['sk_op'] = "<="
+        self.key["sk_op"] = "<="
         return self
 
-    def sk_lt(self, value:any, sk_name:str=None):
+    def sk_lt(self, value: any, sk_name: str = None):
         """sk is less than value"""
-        
+
         self.with_sk(value, sk_name)
-        self.key['sk_op'] = "<"
+        self.key["sk_op"] = "<"
         return self
-
-
-
 
     def _build_query(self):
         key = self.key
@@ -217,7 +214,6 @@ class QueryTableCommand:
         elif sk_op:
             sk_expr = f"{sk_name} {sk_op} :sk"
 
-
         query = f"{pk_expr} AND {sk_expr}"
         attr_vals = {":sk": sk, ":pk": pk}
 
@@ -227,12 +223,24 @@ class QueryTableCommand:
 class Table:
     @staticmethod
     def from_name(table_name: str):
+        """
+        Returns a Table object from table name.
+        You can set DYANMODB_ENDPOINT_URL environment variable
+        to point to a local dynamodb instance
+        """
         import boto3
 
-        return boto3.resource("dynamodb").Table(table_name)
+        endpoint_url = os.getenv("DYANMODB_ENDPOINT_URL")
+        client = boto3.resource("dynamodb", endpoint_url=endpoint_url)
+        return client.Table(table_name)
 
     @staticmethod
     def from_env(env_var: str):
+        """
+        Returns a Table object from an environment variable
+        You can set DYANMODB_ENDPOINT_URL environment variable
+        to point to a local dynamodb instance
+        """
         return Table.from_name(os.getenv(env_var))
 
 
