@@ -270,12 +270,24 @@ class QueryTableCommand:
 class Table:
     @staticmethod
     def from_name(table_name: str):
+        """
+        Returns a Table object from table name.
+        You can set DYANMODB_ENDPOINT_URL environment variable
+        to point to a local dynamodb instance
+        """
         import boto3
 
-        return boto3.resource("dynamodb").Table(table_name)
+        endpoint_url = os.getenv("DYANMODB_ENDPOINT_URL")
+        client = boto3.resource("dynamodb", endpoint_url=endpoint_url)
+        return client.Table(table_name)
 
     @staticmethod
     def from_env(env_var: str):
+        """
+        Returns a Table object from an environment variable
+        You can set DYANMODB_ENDPOINT_URL environment variable
+        to point to a local dynamodb instance
+        """
         return Table.from_name(os.getenv(env_var))
 
 
