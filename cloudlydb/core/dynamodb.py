@@ -273,12 +273,12 @@ class QueryTableCommand:
         if self.index_name:
             query["IndexName"] = self.index_name
 
+        if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
+            self._build_projection(query)
+
         if self.last_evaluated_key:
             pk, sk = KeyEncoder.decode(self.last_evaluated_key)
             query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
-
-        if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
-            self._build_projection(query)
 
         response = self.database_table.query(**query)
 
