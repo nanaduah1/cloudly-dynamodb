@@ -218,6 +218,14 @@ class QueryTableCommand:
         self.key["sk_op"] = "beginswith"
         return self
 
+    def sk_between(self, sk1: str, sk2: str, sk_name: str = None):
+        """sk is between sk1 and sk2"""
+
+        # We store the sk as a tuple
+        self.with_sk((sk1, sk2), sk_name)
+        self.key["sk_op"] = "BETWEEN"
+        return self
+
     def sk_gt(self, value: any, sk_name: str = None):
         """sk is greater than value"""
 
@@ -250,19 +258,27 @@ class QueryTableCommand:
         key = self.key
         pk = key.get("pk")
         sk = key.get("sk")
+        attr_vals = {":sk": sk, ":pk": pk}
 
         pk_name = key.get("pk_name") if key.get("pk_name") else "pk"
         pk_expr = f"{pk_name} = :pk"
+
         sk_name = key.get("sk_name") if key.get("sk_name") else "sk"
         sk_expr = f"{sk_name} = :sk"
+
+        # Construct sk expression
         sk_op = key.get("sk_op")
         if sk_op == "beginswith":
             sk_expr = f"begins_with({sk_name}, :sk)"
+        elif sk_op == "BETWEEN":
+            sk1, sk2 = sk
+
+            sk_expr = f"{sk_name} BETWEEN :sk1 AND :sk2"
+            attr_vals = {":sk1": sk1, ":sk2": sk2, ":pk": pk}
         elif sk_op:
             sk_expr = f"{sk_name} {sk_op} :sk"
 
         query = f"{pk_expr} AND {sk_expr}"
-        attr_vals = {":sk": sk, ":pk": pk}
 
         return query, attr_vals
 
