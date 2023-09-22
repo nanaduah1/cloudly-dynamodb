@@ -1,10 +1,7 @@
 [tool.poetry]
 name = "cloudlydb"
-<<<<<<< HEAD
+
 version = "2.0.0-alpha.5"
-=======
-version = "0.1.4"
->>>>>>> d033658 (Enable ability to override endpoint url of dynamodb)
 description = ""
 authors = ["Nana Duah <gabano2005@gmail.com>"]
 readme = "README.md"
