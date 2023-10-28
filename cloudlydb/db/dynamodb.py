@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 from botocore.exceptions import ClientError
 
@@ -55,20 +55,20 @@ class SetExpression:
         attr_names = {}
         attr_values = {}
 
-        for field, value in obj.items():
+        for fld, value in obj.items():
             if value and isinstance(value, dict):
-                response = self._build_for(value, field, parent_field)
+                response = self._build_for(value, fld, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
                 attr_values.update(inner_attr_vals)
                 expressions.extend(inner_exprs)
-                attr_names[f"#{field}"] = field
+                attr_names[f"#{fld}"] = fld
             else:
                 prefix = f"#{parent_field}." if parent_field else ""
                 prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
-                field_name = f"{field_prefix}{parent_field}{field}"
+                field_name = f"{field_prefix}{parent_field}{fld}"
                 expressions.append(f"{prefix}#{field_name} = :{field_name}")
-                attr_names[f"#{field_name}"] = field
+                attr_names[f"#{field_name}"] = fld
                 attr_values[f":{field_name}"] = value
         return (attr_names, attr_values, expressions)
 
@@ -93,20 +93,20 @@ class AddExpression:
         attr_names = {}
         attr_values = {}
 
-        for field, value in obj.items():
+        for fld, value in obj.items():
             if isinstance(value, dict):
-                response = self._build_for(value, field, parent_field)
+                response = self._build_for(value, fld, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
                 attr_values.update(inner_attr_vals)
                 expressions.extend(inner_exprs)
-                attr_names[f"#{field}"] = field
+                attr_names[f"#{fld}"] = fld
             else:
                 prefix = f"#{parent_field}." if parent_field else ""
                 prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
-                field_name = f"{field_prefix}{parent_field}{field}"
+                field_name = f"{field_prefix}{parent_field}{fld}"
                 expressions.append(f"{prefix}#{field_name} :{field_name}")
-                attr_names[f"#{field_name}"] = field
+                attr_names[f"#{field_name}"] = fld
                 attr_values[f":{field_name}"] = value
         return (attr_names, attr_values, expressions)
 
@@ -151,6 +151,9 @@ class QueryTableCommand:
 
         if self.index_name:
             query["IndexName"] = self.index_name
+
+        if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
+            query["ProjectionExpression"] = ", ".join(self.projection)
 
         response = self.database_table.query(**query)
 
@@ -205,6 +208,12 @@ class QueryTableCommand:
 
         self.with_sk(value, sk_name)
         self.key["sk_op"] = "<"
+        return self
+
+    def only(self, *fields: List[str]):
+        """Only return the fields specified in the list"""
+
+        self.__dict__["projection"] = set(fields)
         return self
 
     def _build_query(self):
