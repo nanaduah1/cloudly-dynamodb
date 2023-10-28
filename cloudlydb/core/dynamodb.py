@@ -3,7 +3,7 @@ import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 from botocore.exceptions import ClientError
 
@@ -199,6 +199,9 @@ class QueryTableCommand:
             pk, sk = KeyEncoder.decode(self.last_evaluated_key)
             query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
 
+        if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
+            query["ProjectionExpression"] = ", ".join(self.projection)
+
         response = self.database_table.query(**query)
 
         return QueryResults(response)
@@ -252,6 +255,12 @@ class QueryTableCommand:
 
         self.with_sk(value, sk_name)
         self.key["sk_op"] = "<"
+        return self
+
+    def only(self, *fields: List[str]):
+        """Only return the fields specified in the list"""
+
+        self.__dict__["projection"] = set(fields)
         return self
 
     def _build_query(self):
