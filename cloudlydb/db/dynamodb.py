@@ -117,6 +117,7 @@ class UpdateItemCommand:
     key: dict
     data: dict
     expression_class: Any = None
+    condition_expression: str = None
 
     def execute(self):
         now = datetime.utcnow().isoformat()
@@ -124,12 +125,17 @@ class UpdateItemCommand:
         ExpressionClass = self.expression_class or SetExpression
         cmd = ExpressionClass(item)
         attr_names, exp_vals, update_expr = cmd.build()
-        self.database_table.update_item(
-            Key=self.key,
-            ExpressionAttributeNames=attr_names,
-            ExpressionAttributeValues=exp_vals,
-            UpdateExpression=update_expr,
-        )
+        params = {
+            "Key": self.key,
+            "ExpressionAttributeNames": attr_names,
+            "ExpressionAttributeValues": exp_vals,
+            "UpdateExpression": update_expr,
+        }
+
+        if self.condition_expression:
+            params["ConditionExpression"] = self.condition_expression
+
+        self.database_table.update_item(**params)
 
 
 @dataclass(frozen=True)
