@@ -136,7 +136,7 @@ class UpdateItemCommand:
         if self.condition_expression:
             params["ConditionExpression"] = self.condition_expression
 
-        self.database_table.update_item(**params)
+        return self.database_table.update_item(**params)
 
 
 class KeyEncoder:
