@@ -2,43 +2,17 @@
 
 [[package]]
 name = "boto3"
-<<<<<<< HEAD
 version = "1.28.84"
-=======
-<<<<<<< HEAD
-version = "1.28.37"
-=======
-version = "1.28.84"
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">= 3.7"
 files = [
-<<<<<<< HEAD
     {file = "boto3-1.28.84-py3-none-any.whl", hash = "sha256:98b01bbea27740720a06f7c7bc0132ae4ce902e640aab090cfb99ad3278449c3"},
     {file = "boto3-1.28.84.tar.gz", hash = "sha256:adfb915958d7b54d876891ea1599dd83189e35a2442eb41ca52b04ea716180b6"},
 ]
 
 [package.dependencies]
 botocore = ">=1.31.84,<1.32.0"
-=======
-<<<<<<< HEAD
-    {file = "boto3-1.28.37-py3-none-any.whl", hash = "sha256:709cf438ad3ea48d426e4659538fe1148fc2719469b52179d07a11c5d26abac6"},
-    {file = "boto3-1.28.37.tar.gz", hash = "sha256:4aec1b54ba6cd352abba2cdd7cdc76e631a4d3ce79c55c0719f85f9c9842e4a2"},
-]
-
-[package.dependencies]
-botocore = ">=1.31.37,<1.32.0"
-=======
-    {file = "boto3-1.28.84-py3-none-any.whl", hash = "sha256:98b01bbea27740720a06f7c7bc0132ae4ce902e640aab090cfb99ad3278449c3"},
-    {file = "boto3-1.28.84.tar.gz", hash = "sha256:adfb915958d7b54d876891ea1599dd83189e35a2442eb41ca52b04ea716180b6"},
-]
-
-[package.dependencies]
-botocore = ">=1.31.84,<1.32.0"
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.7.0,<0.8.0"
 
@@ -47,31 +21,13 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-<<<<<<< HEAD
 version = "1.31.84"
-=======
-<<<<<<< HEAD
-version = "1.31.37"
-=======
-version = "1.31.84"
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">= 3.7"
 files = [
-<<<<<<< HEAD
     {file = "botocore-1.31.84-py3-none-any.whl", hash = "sha256:d65bc05793d1a8a8c191a739f742876b4b403c5c713dc76beef262d18f7984a2"},
     {file = "botocore-1.31.84.tar.gz", hash = "sha256:8913bedb96ad0427660dee083aeaa675466eb662bbf1a47781956b5882aadcc5"},
-=======
-<<<<<<< HEAD
-    {file = "botocore-1.31.37-py3-none-any.whl", hash = "sha256:72e10759be3dff39c5eeb29f85c11a227c369c946d044f2caf62c352d6a6fc06"},
-    {file = "botocore-1.31.37.tar.gz", hash = "sha256:5c92c8bc3c6b49950c95501b30f0ac551fd4952359b53a6fba243094028157de"},
-=======
-    {file = "botocore-1.31.84-py3-none-any.whl", hash = "sha256:d65bc05793d1a8a8c191a739f742876b4b403c5c713dc76beef262d18f7984a2"},
-    {file = "botocore-1.31.84.tar.gz", hash = "sha256:8913bedb96ad0427660dee083aeaa675466eb662bbf1a47781956b5882aadcc5"},
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 ]
 
 [package.dependencies]
@@ -83,15 +39,7 @@ urllib3 = [
 ]
 
 [package.extras]
-<<<<<<< HEAD
 crt = ["awscrt (==0.19.10)"]
-=======
-<<<<<<< HEAD
-crt = ["awscrt (==0.16.26)"]
-=======
-crt = ["awscrt (==0.19.10)"]
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 
 [[package]]
 name = "colorama"
@@ -168,31 +116,13 @@ testing = ["pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pytest"
-<<<<<<< HEAD
 version = "7.4.3"
-=======
-<<<<<<< HEAD
-version = "7.4.0"
-=======
-version = "7.4.3"
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 description = "pytest: simple powerful testing with Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-<<<<<<< HEAD
     {file = "pytest-7.4.3-py3-none-any.whl", hash = "sha256:0d009c083ea859a71b76adf7c1d502e4bc170b80a8ef002da5806527b9591fac"},
     {file = "pytest-7.4.3.tar.gz", hash = "sha256:d989d136982de4e3b29dabcc838ad581c64e8ed52c11fbe86ddebd9da0818cd5"},
-=======
-<<<<<<< HEAD
-    {file = "pytest-7.4.0-py3-none-any.whl", hash = "sha256:78bf16451a2eb8c7a2ea98e32dc119fd2aa758f1d5d66dbf0a59d69a3969df32"},
-    {file = "pytest-7.4.0.tar.gz", hash = "sha256:b4bf8c45bd59934ed84001ad51e11b4ee40d40a1229d2c79f9c592b0a3f6bd8a"},
-=======
-    {file = "pytest-7.4.3-py3-none-any.whl", hash = "sha256:0d009c083ea859a71b76adf7c1d502e4bc170b80a8ef002da5806527b9591fac"},
-    {file = "pytest-7.4.3.tar.gz", hash = "sha256:d989d136982de4e3b29dabcc838ad581c64e8ed52c11fbe86ddebd9da0818cd5"},
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 ]
 
 [package.dependencies]
@@ -222,31 +152,13 @@ six = ">=1.5"
 
 [[package]]
 name = "s3transfer"
-<<<<<<< HEAD
 version = "0.7.0"
-=======
-<<<<<<< HEAD
-version = "0.6.2"
-=======
-version = "0.7.0"
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 description = "An Amazon S3 Transfer Manager"
 optional = false
 python-versions = ">= 3.7"
 files = [
-<<<<<<< HEAD
     {file = "s3transfer-0.7.0-py3-none-any.whl", hash = "sha256:10d6923c6359175f264811ef4bf6161a3156ce8e350e705396a7557d6293c33a"},
     {file = "s3transfer-0.7.0.tar.gz", hash = "sha256:fd3889a66f5fe17299fe75b82eae6cf722554edca744ca5d5fe308b104883d2e"},
-=======
-<<<<<<< HEAD
-    {file = "s3transfer-0.6.2-py3-none-any.whl", hash = "sha256:b014be3a8a2aab98cfe1abc7229cc5a9a0cf05eb9c1f2b86b230fd8df3f78084"},
-    {file = "s3transfer-0.6.2.tar.gz", hash = "sha256:cab66d3380cca3e70939ef2255d01cd8aece6a4907a9528740f668c4b0611861"},
-=======
-    {file = "s3transfer-0.7.0-py3-none-any.whl", hash = "sha256:10d6923c6359175f264811ef4bf6161a3156ce8e350e705396a7557d6293c33a"},
-    {file = "s3transfer-0.7.0.tar.gz", hash = "sha256:fd3889a66f5fe17299fe75b82eae6cf722554edca744ca5d5fe308b104883d2e"},
->>>>>>> c215111 (Add support for update conditionals)
->>>>>>> 20eed10 (Add support for update conditionals)
 ]
 
 [package.dependencies]
