@@ -2,6 +2,8 @@ import boto3
 import pytest
 import uuid
 
+from cloudlydb.models import model
+
 
 @pytest.fixture(scope="session")
 def table_name():
@@ -10,9 +12,7 @@ def table_name():
 
 @pytest.fixture(scope="session")
 def db_client():
-    return boto3.client(
-        "dynamodb", endpoint_url="http://localhost:8000", region_name="us-east-1"
-    )
+    return boto3.client("dynamodb", endpoint_url="http://localhost:8000")
 
 
 @pytest.fixture(scope="session")
@@ -34,7 +34,6 @@ def dynamo_table(db_client, table_name):
 
 @pytest.fixture(scope="session")
 def db_table(dynamo_table, table_name):
-    print("Creating table", dynamo_table)
     return boto3.resource("dynamodb", endpoint_url="http://localhost:8000").Table(
         table_name
     )
@@ -46,3 +45,29 @@ def put_item(db_table):
         db_table.put_item(Item=item)
 
     return _put_item
+
+
+@pytest.fixture(scope="session")
+def get_items(db_table):
+    def _get_items():
+        return db_table.scan()["Items"]
+
+    return _get_items
+
+
+@pytest.fixture(scope="session")
+def get_item(db_table):
+    def _get_item(pk, sk):
+        return db_table.get_item(Key=dict(pk=pk, sk=sk))
+
+    return _get_item
+
+
+@pytest.fixture(scope="session")
+def model_get(db_table):
+    def _get(model: model.DynamodbItem):
+        pk = model._create_pk(**model.__dict__)
+        sk = model._create_sk(**model.__dict__)
+        return db_table.get_item(Key=dict(pk=pk, sk=sk))["Item"]
+
+    return _get

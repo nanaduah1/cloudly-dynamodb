@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -33,21 +34,34 @@ class ConditionalExecuteMixin:
     class ConditionUnmetError(Exception):
         pass
 
-    def setup_conditional_expression(self, attr_names: dict, attr_vals: dict = None):
-        if not getattr(self, "condition_expression_attr_names", None):
-            return
-
-        assert self.condition_expression_attr_names is None or isinstance(
-            self.condition_expression_attr_names, dict
-        ), "condition_expression_attr_names must be a dict"
-
-        if self.condition_expression_attr_names:
-            attr_names.update(self.condition_expression_attr_names)
-
-        if getattr(self, "condition_expression_attr_values", None):
-            attr_vals.update(self.condition_expression_attr_values)
-
     def conditional_execute(self, execute_func: Callable, params: dict):
+        if self.condition_expression_attr_names:
+            assert isinstance(
+                self.condition_expression_attr_names, dict
+            ), "condition_expression_attr_names must be a dict"
+
+            params["ExpressionAttributeNames"] = params.get(
+                "ExpressionAttributeNames", {}
+            )
+            params["ExpressionAttributeNames"].update(
+                self.condition_expression_attr_names
+            )
+
+        if self.condition_expression_attr_values:
+            assert isinstance(
+                self.condition_expression_attr_values, dict
+            ), "condition_expression_attr_values must be a dict"
+
+            params["ExpressionAttributeValues"] = params.get(
+                "ExpressionAttributeValues", {}
+            )
+            params["ExpressionAttributeValues"].update(
+                self.condition_expression_attr_values
+            )
+
+        if getattr(self, "condition_expression", None):
+            params["ConditionExpression"] = self.condition_expression
+
         try:
             return execute_func(**params)
         except ClientError as e:
@@ -79,21 +93,7 @@ class PutItemCommand(ConditionalExecuteMixin):
             "data": data,
             "created": datetime.utcnow().isoformat(),
         }
-
-        exp_attr_names = {}
-        exp_attr_vals = {}
-        self.setup_conditional_expression(exp_attr_names, exp_attr_vals)
-        params = {
-            "Item": item,
-            "ConditionExpression": self.condition_expression,
-        }
-
-        if exp_attr_names:
-            params["ExpressionAttributeNames"] = exp_attr_names
-
-        if exp_attr_vals:
-            params["ExpressionAttributeValues"] = exp_attr_vals
-
+        params = {"Item": item}
         self.conditional_execute(self.database_table.put_item, params)
         return item
 
@@ -195,8 +195,6 @@ class UpdateItemCommand(ConditionalExecuteMixin):
         cmd = ExpressionClass(item)
         attr_names, exp_vals, update_expr = cmd.build()
 
-        self.setup_conditional_expression(attr_names, exp_vals)
-
         params = {
             "Key": self.key,
             "ExpressionAttributeNames": attr_names,
@@ -204,10 +202,49 @@ class UpdateItemCommand(ConditionalExecuteMixin):
             "UpdateExpression": update_expr,
         }
 
-        if self.condition_expression:
-            params["ConditionExpression"] = self.condition_expression
-
         return self.conditional_execute(self.database_table.update_item, params)
+
+
+class KeyEncoder:
+    @staticmethod
+    def encode(pk: str, sk: str) -> str:
+        token = f"{pk}||{sk}"
+        b64_token = base64.b64encode(token.encode("utf-8")).decode("utf-8")
+        return b64_token
+
+    @staticmethod
+    def decode(token: str) -> Tuple[str, str]:
+        decoded = base64.b64decode(token.encode("utf-8")).decode("utf-8")
+        pk, sk = decoded.split("||")
+        return pk, sk
+
+
+class QueryResults:
+    def __init__(self, response: dict):
+        self.__items = response.get("Items", [])
+        self.__last_evaluated_key = response.get("LastEvaluatedKey")
+        self.__next = 0
+        self.count = len(self.__items)
+
+    def __iter__(self) -> dict:
+        return self
+
+    def __next__(self) -> dict:
+        try:
+            item = self.__items[self.__next]
+            self.__next += 1
+            return item
+        except IndexError:
+            raise StopIteration
+
+    def __getitem__(self, index: int) -> dict:
+        return self.__items[index]
+
+    def last_evaluated_key(self) -> str:
+        if not self.__last_evaluated_key:
+            return None
+
+        return KeyEncoder.encode(**self.__last_evaluated_key)
 
 
 @dataclass(frozen=True)
@@ -216,9 +253,9 @@ class QueryTableCommand:
     index_name: str = None
     scan_forward: bool = False
     max_records: int = 25
-    key: dict = field(default_factory=dict)
+    last_evaluated_key: str = None
 
-    def execute(self) -> List[dict]:
+    def execute(self) -> QueryResults:
         query_expression, expr_attr_vals = self._build_query()
         query = dict(
             KeyConditionExpression=query_expression,
@@ -233,9 +270,12 @@ class QueryTableCommand:
         if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
             self._build_projection(query)
 
-        response = self.database_table.query(**query)
+        if self.last_evaluated_key:
+            pk, sk = KeyEncoder.decode(self.last_evaluated_key)
+            query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
 
-        return response.get("Items", [])
+        response = self.database_table.query(**query)
+        return QueryResults(response)
 
     def _build_projection(self, query):
         exp_attr_names = {}
@@ -249,19 +289,46 @@ class QueryTableCommand:
         query["ProjectionExpression"] = ", ".join(projection)
         query["ExpressionAttributeNames"] = exp_attr_names
 
+    def _build_projection(self, query):
+        exp_attr_names = {}
+        projection = []
+        for fld in self.projection:
+            parts = fld.split(".")
+            for part in parts:
+                exp_attr_names[f"#{part}"] = part
+            projection.append(".".join([f"#{part}" for part in parts]))
+
+        query["ProjectionExpression"] = ", ".join(projection)
+        query["ExpressionAttributeNames"] = exp_attr_names
+
+    def _build_projection(self, query):
+        exp_attr_names = {}
+        projection = []
+        for fld in self.projection:
+            parts = fld.split(".")
+            for part in parts:
+                exp_attr_names[f"#{part}"] = part
+            projection.append(".".join([f"#{part}" for part in parts]))
+
+        query["ProjectionExpression"] = ", ".join(projection)
+        query["ExpressionAttributeNames"] = exp_attr_names
+
+    def _update_key(self, **kwargs):
+        key = self.__dict__.get("key", {})
+        key.update(kwargs)
+        self.__dict__["key"] = key
+
     def with_pk(self, pk: Any, pk_name: str = None):
-        self.key["pk"] = pk
-        self.key["pk_name"] = pk_name
+        self._update_key(pk=pk, pk_name=pk_name)
         return self
 
     def with_sk(self, sk: Any, sk_name: str = None):
-        self.key["sk"] = sk
-        self.key["sk_name"] = sk_name
+        self._update_key(sk=sk, sk_name=sk_name)
         return self
 
     def sk_beginswith(self, sk: str, sk_name: str = None):
         self.with_sk(sk, sk_name)
-        self.key["sk_op"] = "beginswith"
+        self._update_key(sk_op="beginswith")
         return self
 
     def sk_between(self, sk1: str, sk2: str, sk_name: str = None):
@@ -269,35 +336,35 @@ class QueryTableCommand:
 
         # We store the sk as a tuple
         self.with_sk((sk1, sk2), sk_name)
-        self.key["sk_op"] = "BETWEEN"
+        self._update_key(sk_op="BETWEEN")
         return self
 
     def sk_gt(self, value: any, sk_name: str = None):
         """sk is greater than value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = ">"
+        self._update_key(sk_op=">")
         return self
 
     def sk_gte(self, value: any, sk_name: str = None):
         """sk is greater than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = ">="
+        self._update_key(sk_op=">=")
         return self
 
     def sk_lte(self, value: any, sk_name: str = None):
         """sk is less than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = "<="
+        self._update_key(sk_op="<=")
         return self
 
     def sk_lt(self, value: any, sk_name: str = None):
         """sk is less than value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = "<"
+        self._update_key(sk_op="<")
         return self
 
     def only(self, *fields: List[str]):
@@ -307,7 +374,7 @@ class QueryTableCommand:
         return self
 
     def _build_query(self):
-        key = self.key
+        key = self.__dict__.get("key", {})
         pk = key.get("pk")
         sk = key.get("sk")
         attr_vals = {":sk": sk, ":pk": pk}
