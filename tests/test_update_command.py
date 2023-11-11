@@ -140,3 +140,31 @@ def test_put_item_with_met_condition(db_table):
 
     response = tested.execute()
     assert response is not None
+
+
+def test_can_do_partial_update(db_table, put_item):
+    put_item({"pk": "3333", "sk": "4444567", "data": {"name": "nana", "age": 10}})
+
+    tested = UpdateItemCommand(
+        database_table=db_table,
+        key={"pk": "3333", "sk": "4444567"},
+        data={"agentId": "nana", "agentCode": "212121"},
+    )
+
+    response = tested.execute()
+    assert response is not None
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
+
+
+def test_can_do_partial_update_with_specific_replace(db_table, put_item):
+    put_item({"pk": "3333", "sk": "4444567", "data": {"name": "nana", "age": 10}})
+
+    tested = UpdateItemCommand(
+        database_table=db_table,
+        key={"pk": "3333", "sk": "4444567"},
+        data={"agentId": "nana", "agentCode": "212121", "billing:$": {"code": "1234"}},
+    )
+
+    response = tested.execute()
+    assert response is not None
+    assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
