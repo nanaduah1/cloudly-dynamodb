@@ -253,7 +253,6 @@ class QueryTableCommand:
     index_name: str = None
     scan_forward: bool = False
     max_records: int = 25
-    key: dict = field(default_factory=dict)
     last_evaluated_key: str = None
 
     def execute(self) -> QueryResults:
@@ -314,19 +313,22 @@ class QueryTableCommand:
         query["ProjectionExpression"] = ", ".join(projection)
         query["ExpressionAttributeNames"] = exp_attr_names
 
+    def _update_key(self, **kwargs):
+        key = self.__dict__.get("key", {})
+        key.update(kwargs)
+        self.__dict__["key"] = key
+
     def with_pk(self, pk: Any, pk_name: str = None):
-        self.key["pk"] = pk
-        self.key["pk_name"] = pk_name
+        self._update_key(pk=pk, pk_name=pk_name)
         return self
 
     def with_sk(self, sk: Any, sk_name: str = None):
-        self.key["sk"] = sk
-        self.key["sk_name"] = sk_name
+        self._update_key(sk=sk, sk_name=sk_name)
         return self
 
     def sk_beginswith(self, sk: str, sk_name: str = None):
         self.with_sk(sk, sk_name)
-        self.key["sk_op"] = "beginswith"
+        self._update_key(sk_op="beginswith")
         return self
 
     def sk_between(self, sk1: str, sk2: str, sk_name: str = None):
@@ -334,35 +336,35 @@ class QueryTableCommand:
 
         # We store the sk as a tuple
         self.with_sk((sk1, sk2), sk_name)
-        self.key["sk_op"] = "BETWEEN"
+        self._update_key(sk_op="BETWEEN")
         return self
 
     def sk_gt(self, value: any, sk_name: str = None):
         """sk is greater than value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = ">"
+        self._update_key(sk_op=">")
         return self
 
     def sk_gte(self, value: any, sk_name: str = None):
         """sk is greater than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = ">="
+        self._update_key(sk_op=">=")
         return self
 
     def sk_lte(self, value: any, sk_name: str = None):
         """sk is less than or equal to value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = "<="
+        self._update_key(sk_op="<=")
         return self
 
     def sk_lt(self, value: any, sk_name: str = None):
         """sk is less than value"""
 
         self.with_sk(value, sk_name)
-        self.key["sk_op"] = "<"
+        self._update_key(sk_op="<")
         return self
 
     def only(self, *fields: List[str]):
@@ -372,7 +374,7 @@ class QueryTableCommand:
         return self
 
     def _build_query(self):
-        key = self.key
+        key = self.__dict__.get("key", {})
         pk = key.get("pk")
         sk = key.get("sk")
         attr_vals = {":sk": sk, ":pk": pk}
