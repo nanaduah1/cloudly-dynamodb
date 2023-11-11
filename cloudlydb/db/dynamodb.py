@@ -19,6 +19,16 @@ class ItemKey(ABC):
         pass
 
 
+class BadItemDefinition(Exception):
+    def __init__(self, message):
+        explaination = "Check that the pk and sk are are valid and match an existing item. \
+            This error can also be caused if you are updating an item with a new \
+            map field that do not exist on the item. In this case, you need to \
+            use the special :$ notation to replace the entire new map field. \
+            Example: {'data': {'new_map_field:$': {'new_field': 'new_value'}}}"
+        super().__init__(message + "\n" + explaination)
+
+
 class ConditionalExecuteMixin:
     class ConditionUnmetError(Exception):
         pass
@@ -45,6 +55,8 @@ class ConditionalExecuteMixin:
                 raise ConditionalExecuteMixin.ConditionUnmetError(
                     e.response["Error"]["Message"]
                 )
+            elif e.response["Error"]["Code"] == "ValidationException":
+                raise BadItemDefinition(e.response["Error"]["Message"])
             raise e
 
 
@@ -103,19 +115,24 @@ class SetExpression:
         attr_values = {}
 
         for fld, value in obj.items():
-            if value and isinstance(value, dict):
-                response = self._build_for(value, fld, parent_field)
+            # filed names can have :$ in them to indicate the
+            # value should replace the field name instead of
+            # updating individual fields
+            is_replace = ":$" in fld
+            cleaned_field_name = fld.replace(":$", "")
+            if is_replace is False and value and isinstance(value, dict):
+                response = self._build_for(value, cleaned_field_name, parent_field)
                 (inner_attr_names, inner_attr_vals, inner_exprs) = response
                 attr_names.update(inner_attr_names)
                 attr_values.update(inner_attr_vals)
                 expressions.extend(inner_exprs)
-                attr_names[f"#{fld}"] = fld
+                attr_names[f"#{cleaned_field_name}"] = cleaned_field_name
             else:
                 prefix = f"#{parent_field}." if parent_field else ""
                 prefix = f"#{field_prefix}.{prefix}" if field_prefix else prefix
-                field_name = f"{field_prefix}{parent_field}{fld}"
+                field_name = f"{field_prefix}{parent_field}{cleaned_field_name}"
                 expressions.append(f"{prefix}#{field_name} = :{field_name}")
-                attr_names[f"#{field_name}"] = fld
+                attr_names[f"#{field_name}"] = cleaned_field_name
                 attr_values[f":{field_name}"] = value
         return (attr_names, attr_values, expressions)
 
