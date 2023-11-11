@@ -10,9 +10,7 @@ def table_name():
 
 @pytest.fixture(scope="session")
 def db_client():
-    return boto3.client(
-        "dynamodb", endpoint_url="http://localhost:8000", region_name="us-east-1"
-    )
+    return boto3.client("dynamodb", endpoint_url="http://localhost:8000")
 
 
 @pytest.fixture(scope="session")
