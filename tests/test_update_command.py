@@ -91,7 +91,6 @@ def test_update_command_with_condition_umet_condition(put_item, db_table):
     with pytest.raises(ConditionalExecuteMixin.ConditionUnmetError):
         response = tested.execute()
         assert response is not None
-        print(response)
 
 
 def test_update_command_with_condition_met_condition(put_item, db_table):

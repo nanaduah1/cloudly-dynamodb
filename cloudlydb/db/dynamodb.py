@@ -48,6 +48,21 @@ class ConditionalExecuteMixin:
             attr_vals.update(self.condition_expression_attr_values)
 
     def conditional_execute(self, execute_func: Callable, params: dict):
+        if getattr(self, "condition_expression", None):
+            params["ConditionExpression"] = self.condition_expression
+
+        if getattr(self, "condition_expression_attr_names", None):
+            attr_names = params.get("ExpressionAttributeNames", {})
+            params["ExpressionAttributeNames"] = attr_names.update(
+                self.condition_expression_attr_names
+            )
+
+        if getattr(self, "condition_expression_attr_values", None):
+            attr_vals = params.get("ExpressionAttributeValues", {})
+            params["ExpressionAttributeValues"] = attr_vals.update(
+                self.condition_expression_attr_values
+            )
+
         try:
             return execute_func(**params)
         except ClientError as e:
@@ -79,21 +94,7 @@ class PutItemCommand(ConditionalExecuteMixin):
             "data": data,
             "created": datetime.utcnow().isoformat(),
         }
-
-        exp_attr_names = {}
-        exp_attr_vals = {}
-        self.setup_conditional_expression(exp_attr_names, exp_attr_vals)
-        params = {
-            "Item": item,
-            "ConditionExpression": self.condition_expression,
-        }
-
-        if exp_attr_names:
-            params["ExpressionAttributeNames"] = exp_attr_names
-
-        if exp_attr_vals:
-            params["ExpressionAttributeValues"] = exp_attr_vals
-
+        params = {"Item": item}
         self.conditional_execute(self.database_table.put_item, params)
         return item
 
