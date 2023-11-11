@@ -1,6 +1,10 @@
 [tool.poetry]
 name = "cloudlydb"
+<<<<<<< HEAD
 version = "2.0.0-alpha.6"
+=======
+version = "0.1.11"
+>>>>>>> c215111 (Add support for update conditionals)
 description = ""
 authors = ["Nana Duah <gabano2005@gmail.com>"]
 readme = "README.md"
