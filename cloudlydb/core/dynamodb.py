@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -211,47 +210,6 @@ class UpdateItemCommand(ConditionalExecuteMixin):
         return self.conditional_execute(self.database_table.update_item, params)
 
 
-class KeyEncoder:
-    @staticmethod
-    def encode(pk: str, sk: str) -> str:
-        token = f"{pk}||{sk}"
-        b64_token = base64.b64encode(token.encode("utf-8")).decode("utf-8")
-        return b64_token
-
-    @staticmethod
-    def decode(token: str) -> Tuple[str, str]:
-        decoded = base64.b64decode(token.encode("utf-8")).decode("utf-8")
-        pk, sk = decoded.split("||")
-        return pk, sk
-
-
-class QueryResults:
-    def __init__(self, response: dict):
-        self.__items = response.get("Items", [])
-        self.__last_evaluated_key = response.get("LastEvaluatedKey")
-        self.__next = 0
-
-    def __iter__(self) -> dict:
-        return self
-
-    def __next__(self) -> dict:
-        try:
-            item = self.__items[self.__next]
-            self.__next += 1
-            return item
-        except IndexError:
-            raise StopIteration
-
-    def __getitem__(self, index: int) -> dict:
-        return self.__items[index]
-
-    def last_evaluated_key(self) -> str:
-        if not self.__last_evaluated_key:
-            return None
-
-        return KeyEncoder.encode(**self.__last_evaluated_key)
-
-
 @dataclass(frozen=True)
 class QueryTableCommand:
     database_table: Any
@@ -259,9 +217,8 @@ class QueryTableCommand:
     scan_forward: bool = False
     max_records: int = 25
     key: dict = field(default_factory=dict)
-    last_evaluated_key: str = None
 
-    def execute(self) -> QueryResults:
+    def execute(self) -> List[dict]:
         query_expression, expr_attr_vals = self._build_query()
         query = dict(
             KeyConditionExpression=query_expression,
@@ -276,13 +233,9 @@ class QueryTableCommand:
         if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
             self._build_projection(query)
 
-        if self.last_evaluated_key:
-            pk, sk = KeyEncoder.decode(self.last_evaluated_key)
-            query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
-
         response = self.database_table.query(**query)
 
-        return QueryResults(response)
+        return response.get("Items", [])
 
     def _build_projection(self, query):
         exp_attr_names = {}
