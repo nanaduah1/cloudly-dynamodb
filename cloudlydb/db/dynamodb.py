@@ -19,12 +19,44 @@ class ItemKey(ABC):
         pass
 
 
+class ConditionalExecuteMixin:
+    class ConditionUnmetError(Exception):
+        pass
+
+    def setup_conditional_expression(self, attr_names: dict, attr_vals: dict = None):
+        if not getattr(self, "condition_expression_attr_names", None):
+            return
+
+        assert self.condition_expression_attr_names is None or isinstance(
+            self.condition_expression_attr_names, dict
+        ), "condition_expression_attr_names must be a dict"
+
+        if self.condition_expression_attr_names:
+            attr_names.update(self.condition_expression_attr_names)
+
+        if getattr(self, "condition_expression_attr_values", None):
+            attr_vals.update(self.condition_expression_attr_values)
+
+    def conditional_execute(self, execute_func: Callable, params: dict):
+        try:
+            return execute_func(**params)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise ConditionalExecuteMixin.ConditionUnmetError(
+                    e.response["Error"]["Message"]
+                )
+            raise e
+
+
 @dataclass(frozen=True)
-class PutItemCommand:
+class PutItemCommand(ConditionalExecuteMixin):
     database_table: Any
     data: dict
     key: dict = None
     data_shaper: Callable[[dict], dict] = None
+    condition_expression: str = None
+    condition_expression_attr_names: dict = None
+    condition_expression_attr_values: dict = None
 
     def execute(self):
         data = self.data
@@ -35,7 +67,22 @@ class PutItemCommand:
             "data": data,
             "created": datetime.utcnow().isoformat(),
         }
-        self.database_table.put_item(Item=item)
+
+        exp_attr_names = {}
+        exp_attr_vals = {}
+        self.setup_conditional_expression(exp_attr_names, exp_attr_vals)
+        params = {
+            "Item": item,
+            "ConditionExpression": self.condition_expression,
+        }
+
+        if exp_attr_names:
+            params["ExpressionAttributeNames"] = exp_attr_names
+
+        if exp_attr_vals:
+            params["ExpressionAttributeValues"] = exp_attr_vals
+
+        self.conditional_execute(self.database_table.put_item, params)
         return item
 
 
@@ -112,19 +159,27 @@ class AddExpression:
 
 
 @dataclass(frozen=True)
-class UpdateItemCommand:
+class UpdateItemCommand(ConditionalExecuteMixin):
     database_table: Any
     key: dict
     data: dict
     expression_class: Any = None
     condition_expression: str = None
+    condition_expression_attr_names: dict = None
+    condition_expression_attr_values: dict = None
 
     def execute(self):
+        assert isinstance(self.key, dict), "key must be a dict"
+        assert isinstance(self.data, dict), "data must be a dict"
+
         now = datetime.utcnow().isoformat()
         item = {"data": self.data, "updatedAt": now}
         ExpressionClass = self.expression_class or SetExpression
         cmd = ExpressionClass(item)
         attr_names, exp_vals, update_expr = cmd.build()
+
+        self.setup_conditional_expression(attr_names, exp_vals)
+
         params = {
             "Key": self.key,
             "ExpressionAttributeNames": attr_names,
@@ -135,7 +190,7 @@ class UpdateItemCommand:
         if self.condition_expression:
             params["ConditionExpression"] = self.condition_expression
 
-        return self.database_table.update_item(**params)
+        return self.conditional_execute(self.database_table.update_item, params)
 
 
 @dataclass(frozen=True)
