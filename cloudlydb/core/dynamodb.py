@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import base64
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
@@ -33,21 +34,34 @@ class ConditionalExecuteMixin:
     class ConditionUnmetError(Exception):
         pass
 
-    def setup_conditional_expression(self, attr_names: dict, attr_vals: dict = None):
-        if not getattr(self, "condition_expression_attr_names", None):
-            return
-
-        assert self.condition_expression_attr_names is None or isinstance(
-            self.condition_expression_attr_names, dict
-        ), "condition_expression_attr_names must be a dict"
-
-        if self.condition_expression_attr_names:
-            attr_names.update(self.condition_expression_attr_names)
-
-        if getattr(self, "condition_expression_attr_values", None):
-            attr_vals.update(self.condition_expression_attr_values)
-
     def conditional_execute(self, execute_func: Callable, params: dict):
+        if self.condition_expression_attr_names:
+            assert isinstance(
+                self.condition_expression_attr_names, dict
+            ), "condition_expression_attr_names must be a dict"
+
+            params["ExpressionAttributeNames"] = params.get(
+                "ExpressionAttributeNames", {}
+            )
+            params["ExpressionAttributeNames"].update(
+                self.condition_expression_attr_names
+            )
+
+        if self.condition_expression_attr_values:
+            assert isinstance(
+                self.condition_expression_attr_values, dict
+            ), "condition_expression_attr_values must be a dict"
+
+            params["ExpressionAttributeValues"] = params.get(
+                "ExpressionAttributeValues", {}
+            )
+            params["ExpressionAttributeValues"].update(
+                self.condition_expression_attr_values
+            )
+
+        if getattr(self, "condition_expression", None):
+            params["ConditionExpression"] = self.condition_expression
+
         try:
             return execute_func(**params)
         except ClientError as e:
@@ -79,21 +93,7 @@ class PutItemCommand(ConditionalExecuteMixin):
             "data": data,
             "created": datetime.utcnow().isoformat(),
         }
-
-        exp_attr_names = {}
-        exp_attr_vals = {}
-        self.setup_conditional_expression(exp_attr_names, exp_attr_vals)
-        params = {
-            "Item": item,
-            "ConditionExpression": self.condition_expression,
-        }
-
-        if exp_attr_names:
-            params["ExpressionAttributeNames"] = exp_attr_names
-
-        if exp_attr_vals:
-            params["ExpressionAttributeValues"] = exp_attr_vals
-
+        params = {"Item": item}
         self.conditional_execute(self.database_table.put_item, params)
         return item
 
@@ -195,8 +195,6 @@ class UpdateItemCommand(ConditionalExecuteMixin):
         cmd = ExpressionClass(item)
         attr_names, exp_vals, update_expr = cmd.build()
 
-        self.setup_conditional_expression(attr_names, exp_vals)
-
         params = {
             "Key": self.key,
             "ExpressionAttributeNames": attr_names,
@@ -204,10 +202,49 @@ class UpdateItemCommand(ConditionalExecuteMixin):
             "UpdateExpression": update_expr,
         }
 
-        if self.condition_expression:
-            params["ConditionExpression"] = self.condition_expression
-
         return self.conditional_execute(self.database_table.update_item, params)
+
+
+class KeyEncoder:
+    @staticmethod
+    def encode(pk: str, sk: str) -> str:
+        token = f"{pk}||{sk}"
+        b64_token = base64.b64encode(token.encode("utf-8")).decode("utf-8")
+        return b64_token
+
+    @staticmethod
+    def decode(token: str) -> Tuple[str, str]:
+        decoded = base64.b64decode(token.encode("utf-8")).decode("utf-8")
+        pk, sk = decoded.split("||")
+        return pk, sk
+
+
+class QueryResults:
+    def __init__(self, response: dict):
+        self.__items = response.get("Items", [])
+        self.__last_evaluated_key = response.get("LastEvaluatedKey")
+        self.__next = 0
+        self.count = len(self.__items)
+
+    def __iter__(self) -> dict:
+        return self
+
+    def __next__(self) -> dict:
+        try:
+            item = self.__items[self.__next]
+            self.__next += 1
+            return item
+        except IndexError:
+            raise StopIteration
+
+    def __getitem__(self, index: int) -> dict:
+        return self.__items[index]
+
+    def last_evaluated_key(self) -> str:
+        if not self.__last_evaluated_key:
+            return None
+
+        return KeyEncoder.encode(**self.__last_evaluated_key)
 
 
 @dataclass(frozen=True)
@@ -217,8 +254,9 @@ class QueryTableCommand:
     scan_forward: bool = False
     max_records: int = 25
     key: dict = field(default_factory=dict)
+    last_evaluated_key: str = None
 
-    def execute(self) -> List[dict]:
+    def execute(self) -> QueryResults:
         query_expression, expr_attr_vals = self._build_query()
         query = dict(
             KeyConditionExpression=query_expression,
@@ -233,9 +271,12 @@ class QueryTableCommand:
         if "projection" in self.__dict__ and isinstance(self.projection, Iterable):
             self._build_projection(query)
 
-        response = self.database_table.query(**query)
+        if self.last_evaluated_key:
+            pk, sk = KeyEncoder.decode(self.last_evaluated_key)
+            query["ExclusiveStartKey"] = {"pk": pk, "sk": sk}
 
-        return response.get("Items", [])
+        response = self.database_table.query(**query)
+        return QueryResults(response)
 
     def _build_projection(self, query):
         exp_attr_names = {}

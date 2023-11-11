@@ -8,7 +8,7 @@ class FakeCreateTable:
     def __init__(self):
         self.items = []
 
-    def put_item(self, Item):
+    def put_item(self, Item, **kwargs):
         self.items.append({**Item})
 
 
