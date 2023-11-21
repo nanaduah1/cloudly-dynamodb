@@ -240,6 +240,15 @@ class QueryResults:
     def __getitem__(self, index: int) -> dict:
         return self.__items[index]
 
+    def __len__(self) -> int:
+        return len(self.__items)
+
+    def __bool__(self) -> bool:
+        return bool(self.__items)
+
+    def __repr__(self) -> str:
+        return f"QueryResults({self.__items})"
+
     def last_evaluated_key(self) -> str:
         if not self.__last_evaluated_key:
             return None
