@@ -207,6 +207,7 @@ class UpdateItemCommand(ConditionalExecuteMixin):
             "ExpressionAttributeNames": attr_names,
             "ExpressionAttributeValues": exp_vals,
             "UpdateExpression": update_expr,
+            "ReturnValues": "ALL_OLD",
         }
 
         return self.conditional_execute(self.database_table.update_item, params)
@@ -456,16 +457,26 @@ class AccumulateCommand:
             )
             update_command.execute()
         except BadItemDefinition:
-            # The path we are trying to update doesn't exist
-            # so we need to create it using the special :$ notation
-            update_command = UpdateItemCommand(
-                self.database_table,
-                key=key,
-                data=self._wrap_with_path(data, path, upsert=True),
-                expression_class=SetExpression,
-            )
-            update_command.execute()
+            self._try_create_item(key, data, path)
         except ResourceNotFoundException:
+            data["timestamp"] = datetime.utcnow().isoformat()
+            put_command = PutItemCommand(
+                self.database_table, self._wrap_with_path(data, path), key
+            )
+            put_command.execute()
+
+    def _try_create_item(self, key: dict, data: dict, path: str = None):
+        # The path we are trying to update doesn't exist
+        # so we need to create it using the special :$ notation
+        update_command = UpdateItemCommand(
+            self.database_table,
+            key=key,
+            data=self._wrap_with_path(data, path, upsert=True),
+            expression_class=SetExpression,
+        )
+        try:
+            update_command.execute()
+        except BadItemDefinition:
             data["timestamp"] = datetime.utcnow().isoformat()
             put_command = PutItemCommand(
                 self.database_table, self._wrap_with_path(data, path), key
