@@ -71,7 +71,7 @@ class QueryItems:
     scan_forward: bool = False
     max_records: int = 25
 
-    def process(self, input: Any) -> Any:
+    def process(self, input: Any):
         query_cmd = QueryTableCommand(
             self.database_table,
             index_name=self.index_name,

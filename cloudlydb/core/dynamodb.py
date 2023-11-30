@@ -4,8 +4,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import os
 from typing import Any, Callable, Dict, Iterable, List, Tuple
-
+import boto3
 from botocore.exceptions import ClientError
+
+dynamo_exceptions = boto3.client("dynamodb").exceptions
+ConditionalCheckFailedException = dynamo_exceptions.ConditionalCheckFailedException
+ResourceNotFoundException = dynamo_exceptions.ResourceNotFoundException
+InternalServerError = dynamo_exceptions.InternalServerError
 
 
 @dataclass
@@ -64,12 +69,14 @@ class ConditionalExecuteMixin:
 
         try:
             return execute_func(**params)
+        except ResourceNotFoundException as e:
+            raise e
+        except ConditionalCheckFailedException as e:
+            raise ConditionalExecuteMixin.ConditionUnmetError(
+                e.response["Error"]["Message"]
+            )
         except ClientError as e:
-            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-                raise ConditionalExecuteMixin.ConditionUnmetError(
-                    e.response["Error"]["Message"]
-                )
-            elif e.response["Error"]["Code"] == "ValidationException":
+            if e.response["Error"]["Code"] == "ValidationException":
                 raise BadItemDefinition(e.response["Error"]["Message"])
             raise e
 
@@ -439,16 +446,44 @@ class Table:
 class AccumulateCommand:
     database_table: Any
 
-    def write_stat(self, key: dict, data: dict):
+    def write_stat(self, key: dict, data: dict, path: str = None):
         try:
             update_command = UpdateItemCommand(
                 self.database_table,
                 key=key,
-                data=data,
+                data=self._wrap_with_path(data, path),
                 expression_class=AddExpression,
             )
             update_command.execute()
-        except ClientError:
+        except BadItemDefinition:
+            # The path we are trying to update doesn't exist
+            # so we need to create it using the special :$ notation
+            update_command = UpdateItemCommand(
+                self.database_table,
+                key=key,
+                data=self._wrap_with_path(data, path, upsert=True),
+                expression_class=SetExpression,
+            )
+            update_command.execute()
+        except ResourceNotFoundException:
             data["timestamp"] = datetime.utcnow().isoformat()
-            put_command = PutItemCommand(self.database_table, data, key)
+            put_command = PutItemCommand(
+                self.database_table, self._wrap_with_path(data, path), key
+            )
             put_command.execute()
+
+    def _wrap_with_path(self, data: dict, path: str, upsert: bool = False):
+        if not path:
+            return data
+        parts = path.split(".")
+        result = {}
+        for part in parts[::-1]:
+            result[part] = {}
+            result = result[part]
+
+        last_part = parts[-1]
+        if upsert:
+            last_part += ":$"  # special notation to replace the entire field
+
+        result[last_part] = data
+        return result
