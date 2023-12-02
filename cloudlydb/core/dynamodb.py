@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 import os
 from typing import Any, Callable, Dict, Iterable, List, Tuple
@@ -191,6 +191,7 @@ class UpdateItemCommand(ConditionalExecuteMixin):
     condition_expression: str = None
     condition_expression_attr_names: dict = None
     condition_expression_attr_values: dict = None
+    retutrn_values: str = "ALL_NEW"
 
     def execute(self):
         assert isinstance(self.key, dict), "key must be a dict"
@@ -207,7 +208,7 @@ class UpdateItemCommand(ConditionalExecuteMixin):
             "ExpressionAttributeNames": attr_names,
             "ExpressionAttributeValues": exp_vals,
             "UpdateExpression": update_expr,
-            "ReturnValues": "ALL_OLD",
+            "ReturnValues": self.retutrn_values,
         }
 
         return self.conditional_execute(self.database_table.update_item, params)
@@ -449,39 +450,39 @@ class AccumulateCommand:
 
     def write_stat(self, key: dict, data: dict, path: str = None):
         try:
-            update_command = UpdateItemCommand(
-                self.database_table,
-                key=key,
-                data=self._wrap_with_path(data, path),
-                expression_class=AddExpression,
-            )
-            update_command.execute()
+            return self._try_update_item(key, data, path)
         except BadItemDefinition:
-            self._try_create_item(key, data, path)
+            return self._try_replace_or_create(key, data, path)
         except ResourceNotFoundException:
-            data["timestamp"] = datetime.utcnow().isoformat()
-            put_command = PutItemCommand(
-                self.database_table, self._wrap_with_path(data, path), key
-            )
-            put_command.execute()
+            return self._insert_new_item(key, data, path)
 
-    def _try_create_item(self, key: dict, data: dict, path: str = None):
-        # The path we are trying to update doesn't exist
-        # so we need to create it using the special :$ notation
+    def _insert_new_item(self, key: dict, data: dict, path: str = None):
+        data["timestamp"] = datetime.utcnow().isoformat()
+        put_command = PutItemCommand(
+            self.database_table, self._wrap_with_path(data, path), key
+        )
+        put_command.execute()
+        return data
+
+    def _try_update_item(
+        self, key: dict, data: dict, path: str = None, upsert: bool = False
+    ):
         update_command = UpdateItemCommand(
             self.database_table,
             key=key,
-            data=self._wrap_with_path(data, path, upsert=True),
-            expression_class=SetExpression,
+            data=self._wrap_with_path(data, path, upsert=upsert),
+            expression_class=SetExpression if upsert is True else AddExpression,
         )
+        result = update_command.execute()
+        return result["Attributes"]["data"]
+
+    def _try_replace_or_create(self, key: dict, data: dict, path: str = None):
+        # The path we are trying to update doesn't exist
+        # so we need to create it using the special :$ notation
         try:
-            update_command.execute()
+            return self._try_update_item(key, data, path, upsert=True)
         except BadItemDefinition:
-            data["timestamp"] = datetime.utcnow().isoformat()
-            put_command = PutItemCommand(
-                self.database_table, self._wrap_with_path(data, path), key
-            )
-            put_command.execute()
+            return self._insert_new_item(key, data, path)
 
     def _wrap_with_path(self, data: dict, path: str, upsert: bool = False):
         if not path:
