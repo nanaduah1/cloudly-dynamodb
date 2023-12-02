@@ -38,3 +38,21 @@ def test_can_write_to_a_new_record(db_table, get_item, put_item):
     updated_item = get_item(**item_key).get("Item")
     assert updated_item["data"]["stats"]["boys"] == 3
     assert updated_item["data"]["stats"]["girls"] == 6
+
+
+def test_can_write_nested_stats(db_table, get_item, put_item):
+    key = {"sk": "ANALYTICS#123", "pk": "ANALYICS#entity=PAYMENT"}
+    stats = {
+        "allTime": {"total": 100, "count": 10},
+        "d20231202": {"total": 100, "count": 10},
+    }
+
+    tested = AccumulateCommand(database_table=db_table)
+    tested.write_stat(key, stats.copy())
+    tested.write_stat(key, stats.copy())
+
+    updated_item = get_item(**key).get("Item")
+    assert updated_item["data"]["allTime"]["total"] == 200
+    assert updated_item["data"]["allTime"]["count"] == 20
+    assert updated_item["data"]["d20231202"]["total"] == 200
+    assert updated_item["data"]["d20231202"]["count"] == 20
