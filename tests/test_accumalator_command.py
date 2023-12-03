@@ -1,3 +1,4 @@
+from decimal import Decimal
 from cloudlydb.core.dynamodb import AccumulateCommand
 
 
@@ -6,12 +7,11 @@ def test_accumulate_command(db_table, put_item, get_item):
     put_item({**item_key, "data": {"age": 10, "boys": 12}})
     tested = AccumulateCommand(database_table=db_table)
     tested.write_stat(item_key, {"boys": 1, "girls": 2})
+    expected = {"age": Decimal(10), "boys": Decimal(13), "girls": Decimal(2)}
 
-    updated_item = get_item(**item_key).get("Item")
-    assert updated_item["data"]["age"] == 10
-    print(updated_item)
-    assert updated_item["data"]["boys"] == 13
-    assert updated_item["data"]["girls"] == 2
+    updated_item = get_item(**item_key).get("Item").get("data")
+    updated_item.pop("timestamp", None)
+    assert updated_item == expected
 
 
 def test_can_write_to_a_target_field(db_table, get_item, put_item):

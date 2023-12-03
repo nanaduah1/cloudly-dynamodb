@@ -446,56 +446,98 @@ class Table:
 
 @dataclass
 class AccumulateCommand:
+    """
+    The accumulation is done in memory and then written to the database
+    as a single update command.
+
+    WARNING: This is not thread safe and should only be used in a single
+    threaded environment.
+    """
+
     database_table: Any
 
     def write_stat(self, key: dict, data: dict, path: str = None):
-        try:
-            return self._try_update_item(key, data, path)
-        except BadItemDefinition:
-            return self._try_replace_or_create(key, data, path)
-        except ResourceNotFoundException:
-            return self._insert_new_item(key, data, path)
+        results = self._get_current_record(key)
+        if results is None:
+            # We are free to insert a new record
+            return self._insert_new_stats(key, data, path)
 
-    def _insert_new_item(self, key: dict, data: dict, path: str = None):
+        current_record = results.get("data", {})
+        return self._updated_record(current_record, key, data, path)
+
+    def _insert_new_stats(self, key: dict, data: dict, path: str = None):
         data["timestamp"] = datetime.utcnow().isoformat()
+        if path:
+            data = {path: data}
         put_command = PutItemCommand(
-            self.database_table, self._wrap_with_path(data, path), key
+            database_table=self.database_table, data=data, key=key
         )
         put_command.execute()
         return data
 
-    def _try_update_item(
-        self, key: dict, data: dict, path: str = None, upsert: bool = False
-    ):
-        update_command = UpdateItemCommand(
-            self.database_table,
-            key=key,
-            data=self._wrap_with_path(data, path, upsert=upsert),
-            expression_class=SetExpression if upsert is True else AddExpression,
+    def _updated_record(self, current_record, key: dict, data: dict, path: str = None):
+        merged_data = DictPairAccumulator(current_record).add(data, path)
+        put_command = UpdateItemCommand(
+            database_table=self.database_table, data=merged_data, key=key
         )
-        result = update_command.execute()
-        return result["Attributes"]["data"]
+        results = put_command.execute()
+        return results.get("Attributes", {}).get("data", {})
 
-    def _try_replace_or_create(self, key: dict, data: dict, path: str = None):
-        # The path we are trying to update doesn't exist
-        # so we need to create it using the special :$ notation
+    def _get_current_record(self, key: dict):
         try:
-            return self._try_update_item(key, data, path, upsert=True)
-        except BadItemDefinition:
-            return self._insert_new_item(key, data, path)
+            return self.database_table.get_item(Key=key).get("Item")
+        except ResourceNotFoundException:
+            return None
 
-    def _wrap_with_path(self, data: dict, path: str, upsert: bool = False):
-        if not path:
+
+@dataclass
+class DictPairAccumulator:
+    """
+    Adds stats values from data to current_record.
+    The final results contains only keys from  new_data
+    such that the values are the sum of the values in both.
+    Fields in new_data that are not in current_record are added.
+
+    IMPORTANT: Values are only numeric or dicts
+
+    Example:
+        current_record = {'data':{ stats: {'a': 1, 'b': 2}}}
+        data = {'a': 2, 'c': 3}
+        path = 'stats'
+        result = {'data':{ stats: {'a': 3, 'c': 3}}}
+    """
+
+    original: dict
+
+    def add(self, data: dict, path: str = None):
+        current_stats = self.original
+        if path:
+            data = {path: data}
+
+        # No need to merge if we don't have any an original
+        if not self.original:
             return data
-        parts = path.split(".")
-        result = {}
-        for part in parts[::-1]:
-            result[part] = {}
-            result = result[part]
 
-        last_part = parts[-1]
-        if upsert:
-            last_part += ":$"  # special notation to replace the entire field
+        results = {}
+        stack = [(current_stats, data, results)]
+        while stack:
+            original, new_value, state = stack.pop()
+            for key, value in new_value.items():
+                if key not in original:
+                    # If the value is a dict, we need to create it
+                    # using the special :$ notation to indicate that
+                    # the value is a dict and should replace the entire value
+                    if isinstance(value, dict):
+                        state[key + ":$"] = value
+                    else:
+                        state[key] = value
+                    continue
 
-        result[last_part] = data
-        return result
+                if not isinstance(value, dict):
+                    state[key] = value + original[key]
+                    continue
+
+                state[key] = {}
+                stack.append((original[key], value, state[key]))
+
+        return results
