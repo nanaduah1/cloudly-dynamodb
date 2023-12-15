@@ -1,8 +1,10 @@
 from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Callable, Iterable
 from uuid import uuid4
+
 
 from cloudlydb.core.dynamodb import (
     PutItemCommand,
@@ -88,9 +90,10 @@ class ItemManager:
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
+        fully_serialized_data = self._serialize(cleaned_data)
         create_command = PutItemCommand(
             self._model_class.Meta.dynamo_table,
-            data=cleaned_data,
+            data=fully_serialized_data,
             key=dict(pk=pk, sk=sk),
         )
         response = create_command.execute()
@@ -136,13 +139,18 @@ class ItemManager:
         assert sk is not None, f"invalid sk value '{sk}'"
 
         cleaned_data = self.__validate_data(**kwargs)
+
+        fully_serialized_data = self._serialize(cleaned_data)
         update_command = UpdateItemCommand(
             self._model_class.Meta.dynamo_table,
             key=dict(pk=pk, sk=sk),
-            data=cleaned_data,
+            data=fully_serialized_data,
         )
         update_command.execute()
         return True
+
+    def _serialize(self, data: dict) -> dict:
+        return _serialize(data)
 
     def get(self, index_name=None, **kwargs) -> "DynamodbItem":
         """
@@ -247,6 +255,10 @@ class IdField:
 
 @dataclass
 class DynamodbItem(ABC):
+    """
+    Base class for all models. Must be subclassed and decorated with @dataclass
+    """
+
     id = IdField()
     items = ItemManager()
 
@@ -290,3 +302,54 @@ class DynamodbItem(ABC):
 
     def __str__(self):
         return f"<{self.__class__.__name__} {self.id}>"
+
+
+def _serialize(obj: dict) -> dict:
+    """
+    Recursively serialize all fields that are instances of Serializable
+    """
+    for k, v in obj.items():
+        if isinstance(v, Serializable):
+            obj[k] = v.to_dict()
+        elif isinstance(v, float):
+            obj[k] = Decimal(str(v))
+    return obj
+
+
+class Serializable:
+    def to_dict(self):
+        return _serialize(self.__dict__)
+
+
+class ObjectField:
+    """
+    A descriptor that auto-generates an id for a model
+    """
+
+    def __init__(self, type_class):
+        assert issubclass(
+            type_class, Serializable
+        ), "type_class must be subclass of model.Serializable"
+
+        # Assert is dataclass
+        assert hasattr(type_class, "__dataclass_fields__"), (
+            "type_class must be a dataclass. "
+            "Add @dataclass decorator to the class definition."
+        )
+
+        self._name = None
+        self._type_class = type_class
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        value = instance.__dict__.get(self._name)
+        if isinstance(value, dict):
+            return self._type_class(**value)
+        return value
+
+    def __set__(self, instance, value):
+        instance.__dict__[self._name] = value
+
+    def __set_name__(self, owner, name):
+        self._name = name
