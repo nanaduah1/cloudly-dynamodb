@@ -11,7 +11,10 @@ from cloudlydb.core.dynamodb import (
     UpdateItemCommand,
     QueryTableCommand,
     QueryResults as UntypedQueryResults,
+    Table,
 )
+
+QueryPredicate = Callable[[QueryTableCommand], QueryTableCommand]
 
 
 class UnknownFieldException(Exception):
@@ -67,16 +70,29 @@ class ItemManager:
     def __set__(self, instance, value):
         raise ValueError("Cannot set ItemManager")
 
+    def get_database_table(self):
+        table = getattr(self._model_class.Meta, "table", None)
+        if table is None:
+            table = getattr(self._model_class.Meta, "table", None)
+            table = table or getattr(self._model_class.Meta, "dynamo_table", None)
+            assert (
+                table is not None
+            ), f"table must be set in {self._model_class.__name__}'s Meta class"
+
+            if isinstance(table, str):
+                table = Table.from_name(self._database_table)
+                setattr(self._model_class.Meta, "table", table)
+
+        return table
+
     def create(self, **kwargs):
         """
         Create a new item in the database using config from the attached model class
         """
 
         cleaned_data = self.__validate_data(**kwargs)
-
         instance = self._instance or self._model_class(**cleaned_data)
 
-        # Make sure we have an id
         # Make sure we have an id
         if instance.id is None:
             instance.id = instance._new_id_()
@@ -84,20 +100,21 @@ class ItemManager:
         item_id = instance.id
         cleaned_data["id"] = item_id
 
-        pk = self._model_class._create_pk(**kwargs)
-        sk = self._model_class._create_sk(id=item_id, **kwargs)
+        key = self._model_class.get_key(id=item_id, **kwargs)
+        pk = key.get("pk")
+        sk = key.get("sk")
 
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
         fully_serialized_data = self._serialize(cleaned_data)
+        table = self.get_database_table()
         create_command = PutItemCommand(
-            self._model_class.Meta.dynamo_table,
+            database_table=table,
             data=fully_serialized_data,
-            key=dict(pk=pk, sk=sk),
+            key=key,
         )
         response = create_command.execute()
-
         if response is None:
             raise Exception("Failed to create item")
 
@@ -132,19 +149,20 @@ class ItemManager:
 
         assert id is not None, "id must be provided"
 
-        pk = self._model_class._create_pk(id=id, **kwargs)
-        sk = self._model_class._create_sk(id=id, **kwargs)
+        key = self._model_class.get_key(id=id, **kwargs)
+        pk = key.get("pk")
+        sk = key.get("sk")
 
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
         cleaned_data = self.__validate_data(**kwargs)
-
         fully_serialized_data = self._serialize(cleaned_data)
+        table = self.get_database_table()
         update_command = UpdateItemCommand(
-            self._model_class.Meta.dynamo_table,
-            key=dict(pk=pk, sk=sk),
+            database_table=table,
             data=fully_serialized_data,
+            key=key,
         )
         update_command.execute()
         return True
@@ -152,21 +170,34 @@ class ItemManager:
     def _serialize(self, data: dict) -> dict:
         return _serialize(data)
 
-    def get(self, index_name=None, **kwargs) -> "DynamodbItem":
+    def get(
+        self,
+        index_name=None,
+        predicate: QueryPredicate = None,
+        **kwargs,
+    ) -> "DynamodbItem":
         """
         Get an item from the database using config from the attached model class
         """
 
-        pk = self._model_class._create_pk(**kwargs)
-        sk = self._model_class._create_sk(**kwargs)
+        key = self._model_class.get_key(**kwargs)
+        pk = key.get("pk")
+        sk = key.get("sk")
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
-        get_command = QueryTableCommand(
-            self._model_class.Meta.dynamo_table,
-            index_name=index_name,
+        table = self.get_database_table()
+        get_command = (
+            QueryTableCommand(
+                database_table=table,
+                index_name=index_name,
+            )
+            .with_pk(pk)
+            .with_sk(sk)
         )
-        items = get_command.with_pk(pk).with_sk(sk).execute()
+        if predicate:
+            get_command = predicate(get_command)
+        items = get_command.execute()
 
         if not items:
             return None
@@ -176,7 +207,7 @@ class ItemManager:
 
     def all(
         self,
-        predicate: Callable[[QueryTableCommand], QueryTableCommand] = None,
+        predicate: QueryPredicate = None,
         index_name: str = None,
         limit: int = 50,
         ascending: bool = False,
@@ -194,8 +225,9 @@ class ItemManager:
             predicate
         ), "predicate must be None or callable"
 
+        table = self.get_database_table()
         query_command = QueryTableCommand(
-            self._model_class.Meta.dynamo_table,
+            database_table=table,
             index_name=index_name,
             max_records=limit,
             scan_forward=ascending,
@@ -222,13 +254,14 @@ class ItemManager:
 
         assert id is not None, "id must be provided"
 
-        pk = self._model_class._create_pk(**kwargs)
-        sk = self._model_class._create_sk(**kwargs)
+        key = self._model_class.get_key(**kwargs)
+        pk = key.get("pk")
+        sk = key.get("sk")
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
-        data_table = self._model_class.Meta.dynamo_table
-        data_table.delete_item(Key=dict(pk=pk, sk=sk))
+        table = self.get_database_table()
+        table.delete_item(Key=key)
         return True
 
 
@@ -275,6 +308,12 @@ class DynamodbItem(ABC):
         return self.items.delete(**self.__dict__)
 
     @classmethod
+    def get_key(cls, **kwargs):
+        pk = cls._create_pk(**kwargs)
+        sk = cls._create_sk(**kwargs)
+        return dict(pk=pk, sk=sk)
+
+    @classmethod
     def _create_pk(cls, **kwargs):
         discriminator = getattr(cls.Meta, "model_name", None)
         if discriminator is None:
@@ -302,6 +341,12 @@ class DynamodbItem(ABC):
 
     def __str__(self):
         return f"<{self.__class__.__name__} {self.id}>"
+
+    class Meta:
+        dynamo_table = None
+        dynamo_table_name = None
+        model_name = None
+        sk_prefix = None
 
 
 def _serialize(obj: dict) -> dict:
