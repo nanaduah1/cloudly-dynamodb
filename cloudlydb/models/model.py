@@ -387,7 +387,7 @@ class ObjectField:
 
     def __get__(self, instance, owner):
         if instance is None:
-            return self
+            return None
         value = instance.__dict__.get(self._name)
         if isinstance(value, dict):
             return self._type_class(**value)
@@ -398,3 +398,6 @@ class ObjectField:
 
     def __set_name__(self, owner, name):
         self._name = name
+
+    def to_dict(self):
+        return self._type_class().to_dict()
