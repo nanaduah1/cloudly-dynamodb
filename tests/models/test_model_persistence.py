@@ -225,3 +225,24 @@ def test_multi_level_nested_object_saves(db_table, get_item):
     db_item: Person = Person.items.get(id=m.id)
     assert db_item.address.city.name == "test"
     assert db_item.address.city.state == "test"
+
+
+def test_can_save_model_with_none_objectfield(db_table, get_item):
+    @dataclass
+    class Address(model.Serializable):
+        street: str
+        zip: str
+
+    @dataclass
+    class Person(model.DynamodbItem):
+        name: str
+        age: int
+        address: Address = model.ObjectField(Address)
+
+        class Meta:
+            dynamo_table = db_table
+
+    m = Person.items.create(name="test", age=10)
+
+    db_item: Person = Person.items.get(id=m.id)
+    assert db_item.address is None
