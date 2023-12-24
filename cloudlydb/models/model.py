@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -51,6 +51,56 @@ class QueryResults:
         return self._response.last_evaluated_key()
 
 
+class IItemKeyFactory(ABC):
+    def __init__(self, model_class, **kwargs):
+        self._model_class = model_class
+        self._kwargs = kwargs
+
+    @abstractmethod
+    def for_create(self) -> dict:
+        pass
+
+    @abstractmethod
+    def for_update(self) -> dict:
+        pass
+
+    @abstractmethod
+    def for_query(self) -> dict:
+        pass
+
+    @abstractmethod
+    def for_delete(self) -> dict:
+        pass
+
+
+class DefaultItemKeyFactory(IItemKeyFactory):
+    sk_prefix = None
+    pk_prefix = None
+    id_field = "id"
+
+    def for_create(self) -> dict:
+        pk_prefix = self.pk_prefix or _fully_qualified_name(self._model_class)
+        sk_prefix = self.sk_prefix or self._model_class.__name__
+        sk = f"{sk_prefix}#{self._kwargs.get(self.id_field)}"
+        pk = pk_prefix
+
+        return dict(pk=pk, sk=sk)
+
+    def for_update(self) -> dict:
+        return self.for_create()
+
+    def for_query(self) -> dict:
+        return self.for_create()
+
+    def for_delete(self) -> dict:
+        return self.for_create()
+
+
+class Serializable:
+    def to_dict(self):
+        return _serialize(self.__dict__)
+
+
 class ItemManager:
     def __init__(self):
         self._model_class = None
@@ -70,7 +120,7 @@ class ItemManager:
     def __set__(self, instance, value):
         raise ValueError("Cannot set ItemManager")
 
-    def get_database_table(self):
+    def _get_database_table(self):
         table = getattr(self._model_class.Meta, "table", None)
         if table is None:
             table = getattr(self._model_class.Meta, "table", None)
@@ -84,6 +134,12 @@ class ItemManager:
                 setattr(self._model_class.Meta, "table", table)
 
         return table
+
+    def _get_key_factory(self, **kwargs):
+        key_factory_class = getattr(self._model_class.Meta, "key", None)
+        key_factory_class = key_factory_class or DefaultItemKeyFactory
+        key_factory = key_factory_class(self._model_class, **kwargs)
+        return key_factory
 
     def create(self, **kwargs):
         """
@@ -100,7 +156,8 @@ class ItemManager:
         item_id = instance.id
         cleaned_data["id"] = item_id
 
-        key = self._model_class.get_key(id=item_id, **kwargs)
+        key_factory = self._get_key_factory(id=item_id, **kwargs)
+        key = key_factory.for_create()
         pk = key.get("pk")
         sk = key.get("sk")
 
@@ -108,7 +165,7 @@ class ItemManager:
         assert sk is not None, f"invalid sk value '{sk}'"
 
         fully_serialized_data = self._serialize(cleaned_data)
-        table = self.get_database_table()
+        table = self._get_database_table()
         create_command = PutItemCommand(
             database_table=table,
             data=fully_serialized_data,
@@ -142,14 +199,13 @@ class ItemManager:
 
         return {k: v for k, v in kwargs.items() if k in public_fields or k == "id"}
 
-    def update(self, id: str, **kwargs):
+    def update(self, **kwargs):
         """
         Update an existing item in the database using config from the attached model class
         """
 
-        assert id is not None, "id must be provided"
-
-        key = self._model_class.get_key(id=id, **kwargs)
+        key_factory = self._get_key_factory(**kwargs)
+        key = key_factory.for_update()
         pk = key.get("pk")
         sk = key.get("sk")
 
@@ -158,7 +214,7 @@ class ItemManager:
 
         cleaned_data = self.__validate_data(**kwargs)
         fully_serialized_data = self._serialize(cleaned_data)
-        table = self.get_database_table()
+        table = self._get_database_table()
         update_command = UpdateItemCommand(
             database_table=table,
             data=fully_serialized_data,
@@ -180,13 +236,15 @@ class ItemManager:
         Get an item from the database using config from the attached model class
         """
 
-        key = self._model_class.get_key(**kwargs)
+        key_factory = self._get_key_factory(**kwargs)
+        key = key_factory.for_query()
         pk = key.get("pk")
         sk = key.get("sk")
+
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
-        table = self.get_database_table()
+        table = self._get_database_table()
         get_command = (
             QueryTableCommand(
                 database_table=table,
@@ -219,32 +277,33 @@ class ItemManager:
         pk must always be exact. sk can be a beginswith filter (e.g. "sk__beginswith")
         """
 
-        pk = self._model_class._create_pk(**kwargs)
+        key_factory = self._get_key_factory(**kwargs)
+        key = key_factory.for_query()
+        pk = key.get("pk")
+        sk = key.get("sk")
+
         assert pk is not None, f"invalid pk value '{pk}'"
         assert predicate is None or callable(
             predicate
         ), "predicate must be None or callable"
 
-        table = self.get_database_table()
-        query_command = QueryTableCommand(
-            database_table=table,
-            index_name=index_name,
-            max_records=limit,
-            scan_forward=ascending,
-            last_evaluated_key=last_evaluated_key,
+        table = self._get_database_table()
+        query_command = (
+            QueryTableCommand(
+                database_table=table,
+                index_name=index_name,
+                max_records=limit,
+                scan_forward=ascending,
+                last_evaluated_key=last_evaluated_key,
+            )
+            .with_pk(pk)
+            .sk_beginswith(sk)
         )
 
         if predicate:
             query_command = predicate(query_command)
-        else:
-            # If no predicate is provided, use the sk prefix to filter
-            sk_prefix = (
-                self._model_class.Meta.__dict__.get("sk_prefix")
-                or self._model_class.__name__
-            )
-            query_command = query_command.sk_beginswith(sk_prefix)
 
-        results = query_command.with_pk(pk).execute()
+        results = query_command.execute()
         return QueryResults(results, self._model_class)
 
     def delete(self, **kwargs):
@@ -254,13 +313,14 @@ class ItemManager:
 
         assert id is not None, "id must be provided"
 
-        key = self._model_class.get_key(**kwargs)
+        key_factory = self._get_key_factory(**kwargs)
+        key = key_factory.for_delete()
         pk = key.get("pk")
         sk = key.get("sk")
         assert pk is not None, f"invalid pk value '{pk}'"
         assert sk is not None, f"invalid sk value '{sk}'"
 
-        table = self.get_database_table()
+        table = self._get_database_table()
         table.delete_item(Key=key)
         return True
 
@@ -287,13 +347,20 @@ class IdField:
 
 
 @dataclass
-class DynamodbItem(ABC):
+class DynamodbItem(ABC, Serializable):
     """
     Base class for all models. Must be subclassed and decorated with @dataclass
     """
 
     id = IdField()
     items = ItemManager()
+
+    class Meta:
+        key = DefaultItemKeyFactory
+        dynamo_table = None
+        dynamo_table_name = None
+        model_name = None
+        sk_prefix = None
 
     def save(self) -> bool:
         if self.id is None:
@@ -306,26 +373,6 @@ class DynamodbItem(ABC):
 
     def delete(self) -> bool:
         return self.items.delete(**self.__dict__)
-
-    @classmethod
-    def get_key(cls, **kwargs):
-        pk = cls._create_pk(**kwargs)
-        sk = cls._create_sk(**kwargs)
-        return dict(pk=pk, sk=sk)
-
-    @classmethod
-    def _create_pk(cls, **kwargs):
-        discriminator = getattr(cls.Meta, "model_name", None)
-        if discriminator is None:
-            discriminator = _fully_qualified_name(cls)
-
-        return discriminator
-
-    @classmethod
-    def _create_sk(cls, **kwargs):
-        id = kwargs.get("id")
-        sk = f"{cls.__name__}#{id}"
-        return sk
 
     def _new_id_(self):
         return f"{datetime.utcnow().timestamp()}-{uuid4()}"
@@ -342,12 +389,6 @@ class DynamodbItem(ABC):
     def __str__(self):
         return f"<{self.__class__.__name__} {self.id}>"
 
-    class Meta:
-        dynamo_table = None
-        dynamo_table_name = None
-        model_name = None
-        sk_prefix = None
-
 
 def _serialize(obj: dict) -> dict:
     """
@@ -359,11 +400,6 @@ def _serialize(obj: dict) -> dict:
         elif isinstance(v, float):
             obj[k] = Decimal(str(v))
     return obj
-
-
-class Serializable:
-    def to_dict(self):
-        return _serialize(self.__dict__)
 
 
 class ObjectField:

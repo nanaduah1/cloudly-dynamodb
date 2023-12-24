@@ -16,13 +16,15 @@ def StudentModel(db_table):
     return Student
 
 
-def test_id_auto_generates(StudentModel, model_get):
+def test_id_auto_generates(StudentModel, get_item):
     model = StudentModel(name="test", age=10)
     model.save()
     assert model.id is not None
-    item = model_get(model)
-    assert item["pk"] == model.__class__._create_pk()
-    assert item["sk"] == model.__class__._create_sk(id=model.id)
+    item = get_item(
+        pk="tests.models.test_model_persistence.Student", sk=f"Student#{model.id}"
+    )
+    assert item["pk"] == "tests.models.test_model_persistence.Student"
+    assert item["sk"] == f"Student#{model.id}"
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
@@ -37,10 +39,12 @@ def test_id_is_unique(StudentModel):
     assert model1.id != model2.id
 
 
-def test_create_record_from_manager(StudentModel, model_get):
+def test_create_record_from_manager(StudentModel, get_item):
     model = StudentModel.items.create(name="test", age=10)
     assert model.id is not None
-    item = model_get(model)
+    item = get_item(
+        pk="tests.models.test_model_persistence.Student", sk=f"Student#{model.id}"
+    )
 
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
@@ -61,33 +65,37 @@ def test_get_record_from_manager(put_item, StudentModel):
     assert model.age == m.age
 
 
-def test_override_pk(db_table, model_get):
+def test_override_pk(db_table, get_item):
+    class ItemKey(model.DefaultItemKeyFactory):
+        def for_create(self) -> dict:
+            key = super().for_create()
+            key["pk"] = f"DATA#FAKA#{self._kwargs.get('_country')}"
+            return key
+
     @dataclass
     class Class(model.DynamodbItem):
         name: str
         age: int
         _country: str = "USA"
 
-        @classmethod
-        def _create_pk(cls, **kwargs):
-            return f"DATA#FAKA#{kwargs.get('_country')}"
-
         class Meta:
             dynamo_table = db_table
+            key = ItemKey
 
     m = Class(name="test", age=10, _country="UK")
     m.save()
     assert m.id is not None
-    item = model_get(m)
+    item = get_item(pk="DATA#FAKA#UK", sk=f"Class#{m.id}")
 
-    assert item["pk"] == m.__class__._create_pk(_country="UK")
-    assert item["sk"] == m.__class__._create_sk(id=m.id)
+    print(item)
+    assert item["pk"] == "DATA#FAKA#UK"
+    assert item["sk"] == f"Class#{m.id}"
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
     assert item["data"]["id"] is not None
 
 
-def test_model_with_nested_object(db_table, model_get):
+def test_model_with_nested_object(db_table, get_item):
     @dataclass
     class Address(model.Serializable):
         street: str
@@ -112,11 +120,11 @@ def test_model_with_nested_object(db_table, model_get):
 
     m.save()
 
-    item = model_get(m)
-    assert item["data"]["address"]["street"] == "123"
-    assert item["data"]["address"]["city"] == "test"
-    assert item["data"]["address"]["state"] == "test"
-    assert item["data"]["address"]["zip"] == "12345"
+    item = Person.items.get(id=m.id).to_dict()
+    assert item["address"]["street"] == "123"
+    assert item["address"]["city"] == "test"
+    assert item["address"]["state"] == "test"
+    assert item["address"]["zip"] == "12345"
 
 
 def test_get_record_from_manager_with_nested_object(put_item, db_table):

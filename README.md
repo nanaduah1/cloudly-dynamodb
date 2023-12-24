@@ -12,8 +12,6 @@ Example:
 from datetime import datetime
 import boto3
 
-table = boto3.resource('dynamodb').Table('STUDENT')
-
 @dataclass
 class Student(DynamodbItem):
     firstName: str
@@ -21,7 +19,7 @@ class Student(DynamodbItem):
     dateOfBirth: datetime
 
     class Meta:
-        dynamo_table = table
+        table = 'STUDENT_TABLE'
 
 # Get a single record
 student = Student.items.get(id='123455')
@@ -53,15 +51,20 @@ Student.items.delete(id="123444") # Delete a single record
 
 ## Controlling the partition key and sort key
 
-By default, the partition key is generated from the fully qualified class name of
-the model. The sort key is generated from the class name of the model and the instance id.
-
-If this is not what you want, you can override the partition key and sort key by overriding
-the `_create_pk` and `_create_sk` methods.
+You can control how the partition key and sort key are created by setting
+key of the model class.
 
 Example:
 
 ```Python
+
+class MyItemKeyClass(DefaultItemKeyFactory):
+   def for_create(self):
+        return {
+            'pk': f'STUDENT#{self._kwargs["firstName"]}',
+            'sk': f'STUDENT#{self._kwargs["id"]}'
+        }
+
 
 @dataclass
 class Student(DynamodbItem):
@@ -70,17 +73,8 @@ class Student(DynamodbItem):
     dateOfBirth: datetime
 
     class Meta:
-        data_table = table
-
-    @classmethod
-    def _create_pk(cls, **kwargs):
-        first_name = kwargs.get('firstName')
-        return f'STUDENT#{firstName}'
-
-    @classmethod
-    def _create_sk(cls, **kwargs):
-        return f'STUDENT#{kwargs.get('id')}'
-
+        table = table
+        key = MyItemKeyClass
 ```
 
 Note that any values you include in the partition key or sort key
@@ -89,23 +83,6 @@ if you want to query for a student, you must provide the firstName and id.
 
 ```Python
 Student.items.get(firstName='John', id='123455')
-```
-
-By default, the sort key (sk) is prefixed with the class name. You can change this by
-specifying `sk_prefix` in the Meta class.
-
-```Python
-
-@dataclass
-class Student(DynamodbItem):
-    firstName: str
-    lastName: str
-    dateOfBirth: datetime
-
-    class Meta:
-        data_table = table
-        sk_prefix = 'StudentProfile'
-
 ```
 
 ## Migration from version 1

@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 import pytest
 
-from cloudlydb.models.model import DynamodbItem, UnknownFieldException
+from cloudlydb.models.model import (
+    DynamodbItem,
+    UnknownFieldException,
+    DefaultItemKeyFactory,
+)
 
 
 class FakeCreateTable:
@@ -39,8 +43,8 @@ def test_id_auto_generates():
     assert len(table.items) == 1
     item = table.items[0]
 
-    assert item["pk"] == model.__class__._create_pk()
-    assert item["sk"] == model.__class__._create_sk(id=model.id)
+    assert item["pk"] == "tests.models.test_model.MyFakeModel"
+    assert item["sk"] == f"MyFakeModel#{model.id}"
     assert item["data"]["id"] == model.id
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
@@ -128,18 +132,21 @@ def test_get_record_from_manager():
 def test_override_pk():
     table = FakeCreateTable()
 
+    class ItemKey(DefaultItemKeyFactory):
+        def for_create(self) -> dict:
+            key = super().for_create()
+            key["pk"] = f"DATA#{self._kwargs.get('_country')}"
+            return key
+
     @dataclass
     class MyFakeModel(DynamodbItem):
         name: str
         age: int
         _country: str = "USA"
 
-        @classmethod
-        def _create_pk(cls, **kwargs):
-            return f"DATA#FAKA#{kwargs.get('_country')}"
-
         class Meta:
             dynamo_table = table
+            key = ItemKey
 
     model = MyFakeModel(name="test", age=10, _country="UK")
     model.save()
@@ -147,8 +154,8 @@ def test_override_pk():
     assert len(table.items) == 1
     item = table.items[0]
 
-    assert item["pk"] == model.__class__._create_pk(_country="UK")
-    assert item["sk"] == model.__class__._create_sk(id=model.id)
+    assert item["pk"] == "DATA#UK"
+    assert item["sk"] == f"MyFakeModel#{model.id}"
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
     assert item["data"]["id"] is not None
@@ -157,18 +164,21 @@ def test_override_pk():
 def test_override_sk():
     table = FakeCreateTable()
 
+    class ItemKey(DefaultItemKeyFactory):
+        def for_create(self) -> dict:
+            key = super().for_create()
+            key["sk"] = f"DATA#FAKA#{self._kwargs.get('_country')}"
+            return key
+
     @dataclass
     class MyFakeModel(DynamodbItem):
         name: str
         age: int
         _country: str = "USA"
 
-        @classmethod
-        def _create_sk(cls, **kwargs):
-            return f"DATA#FAKA#{kwargs.get('_country')}"
-
         class Meta:
             dynamo_table = table
+            key = ItemKey
 
     model = MyFakeModel(name="test", age=10, _country="UK")
     model.save()
@@ -176,8 +186,8 @@ def test_override_sk():
     assert len(table.items) == 1
     item = table.items[0]
 
-    assert item["pk"] == model.__class__._create_pk()
-    assert item["sk"] == model.__class__._create_sk(_country="UK")
+    assert item["pk"] == "tests.models.test_model.MyFakeModel"
+    assert item["sk"] == "DATA#FAKA#UK"
     assert item["data"]["name"] == "test"
     assert item["data"]["age"] == 10
     assert item["data"]["id"] is not None

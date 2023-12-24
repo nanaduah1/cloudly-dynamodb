@@ -58,16 +58,6 @@ def get_items(db_table):
 @pytest.fixture(scope="session")
 def get_item(db_table):
     def _get_item(pk, sk):
-        return db_table.get_item(Key=dict(pk=pk, sk=sk))
+        return db_table.get_item(Key=dict(pk=pk, sk=sk)).get("Item")
 
     return _get_item
-
-
-@pytest.fixture(scope="session")
-def model_get(db_table):
-    def _get(model: model.DynamodbItem):
-        pk = model._create_pk(**model.__dict__)
-        sk = model._create_sk(**model.__dict__)
-        return db_table.get_item(Key=dict(pk=pk, sk=sk))["Item"]
-
-    return _get
