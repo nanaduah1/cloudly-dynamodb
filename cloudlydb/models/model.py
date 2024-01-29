@@ -130,7 +130,7 @@ class ItemManager:
             ), f"table must be set in {self._model_class.__name__}'s Meta class"
 
             if isinstance(table, str):
-                table = Table.from_name(self._database_table)
+                table = Table.from_name(table)
                 setattr(self._model_class.Meta, "table", table)
 
         return table
