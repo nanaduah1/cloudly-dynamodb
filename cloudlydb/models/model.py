@@ -31,8 +31,10 @@ class QueryResults:
         self._response = response
         self._model_class = model_class
         self.__next = 0
+        self._count = len(response or [])
 
     def __iter__(self) -> Iterable["DynamodbItem"]:
+        self.__next = 0
         return self
 
     def __next__(self) -> "DynamodbItem":
@@ -45,6 +47,9 @@ class QueryResults:
 
     def __getitem__(self, index: int) -> "DynamodbItem":
         return self._model_class._from_item_dict(self._response[index])
+
+    def __len__(self) -> int:
+        return self._count
 
     @property
     def last_evaluated_key(self) -> str:
