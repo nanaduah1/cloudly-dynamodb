@@ -442,3 +442,31 @@ class ObjectField:
 
     def to_dict(self):
         return self._type_class().to_dict()
+
+
+class Keys(DefaultItemKeyFactory):
+    fields = ["id"]
+
+    def _key_from(self, *args):
+        key = super().for_create()
+        args_values = [self._kwargs.get(arg) or "" for arg in args]
+        key["sk"] = f"{self._model_class.__name__}#{'#'.join(args_values)}".strip("#")
+        return key
+
+    def for_create(self) -> dict:
+        return self._key_from(*self.fields)
+
+    @classmethod
+    def using(cls, key_class_name, *fields):
+        return type(key_class_name, (cls,), {"fields": fields})
+
+
+class ObjectListField(ObjectField, Serializable):
+    def __init__(self, cls):
+        super().__init__(cls)
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return None
+        value = instance.__dict__.get(self._name)
+        return [self._type_class(**v) for v in value]
