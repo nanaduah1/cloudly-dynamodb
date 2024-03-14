@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable, Iterable
 from uuid import uuid4
@@ -380,7 +380,7 @@ class DynamodbItem(ABC, Serializable):
         return self.items.delete(**self.__dict__)
 
     def _new_id_(self):
-        return f"{datetime.utcnow().timestamp()}-{uuid4()}"
+        return f"{datetime.now(timezone.utc).timestamp()}-{uuid4()}"
 
     @classmethod
     def _from_item_dict(cls, item: dict):

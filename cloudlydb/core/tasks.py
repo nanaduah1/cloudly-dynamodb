@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from cloudlydb.core.dynamodb import (
@@ -20,7 +20,7 @@ class PutItem:
     def process(self, input: Any) -> Any:
         data = {**input}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if "id" not in data or not data["id"]:
             data["id"] = f"{now.timestamp()}-{uuid.uuid4()}"
 

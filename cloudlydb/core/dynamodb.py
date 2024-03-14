@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import base64
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 import boto3
@@ -98,7 +98,7 @@ class PutItemCommand(ConditionalExecuteMixin):
         item = {
             **keys,
             "data": data,
-            "created": datetime.utcnow().isoformat(),
+            "created": datetime.now(timezone.utc).isoformat(),
         }
         params = {"Item": item}
         self.conditional_execute(self.database_table.put_item, params)
@@ -197,7 +197,7 @@ class UpdateItemCommand(ConditionalExecuteMixin):
         assert isinstance(self.key, dict), "key must be a dict"
         assert isinstance(self.data, dict), "data must be a dict"
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         item = {"data": self.data, "updatedAt": now}
         ExpressionClass = self.expression_class or SetExpression
         cmd = ExpressionClass(item)
@@ -466,7 +466,7 @@ class AccumulateCommand:
         return self._updated_record(current_record, key, data, path)
 
     def _insert_new_stats(self, key: dict, data: dict, path: str = None):
-        data["timestamp"] = datetime.utcnow().isoformat()
+        data["timestamp"] = datetime.now(timezone.utc).isoformat()
         if path:
             data = {path: data}
         put_command = PutItemCommand(
