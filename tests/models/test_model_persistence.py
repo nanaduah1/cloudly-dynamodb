@@ -254,3 +254,20 @@ def test_can_save_model_with_none_objectfield(db_table, get_item):
 
     db_item: Person = Person.items.get(id=m.id)
     assert db_item.address is None
+
+
+def test_model_ids_differ(db_table):
+    @dataclass
+    class Person(model.DynamodbItem):
+        name: str
+        age: int
+
+        class Meta:
+            dynamo_table = db_table
+
+    m1 = Person.items.create(name="test", age=10)
+    m2 = Person.items.create(name="test", age=20)
+    m3 = Person.items.create(name="test", age=30)
+    m4 = Person.items.create(name="test", age=40)
+
+    assert m1.id != m2.id != m3.id != m4.id

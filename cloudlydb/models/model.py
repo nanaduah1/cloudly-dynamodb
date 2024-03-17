@@ -109,7 +109,6 @@ class Serializable:
 class ItemManager:
     def __init__(self):
         self._model_class = None
-        self._instance = None
 
     def __get__(self, instance, owner):
         # We can only attach to a subclass of DynamodbItem
@@ -117,8 +116,6 @@ class ItemManager:
             owner, DynamodbItem
         ), "ItemManager must be attached to a DynamodbItem"
         self._model_class = owner
-        if instance:
-            self._instance = instance
 
         return self
 
@@ -152,7 +149,7 @@ class ItemManager:
         """
 
         cleaned_data = self.__validate_data(**kwargs)
-        instance = self._instance or self._model_class(**cleaned_data)
+        instance = self._model_class(**cleaned_data)
 
         # Make sure we have an id
         if instance.id is None:
